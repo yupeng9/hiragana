@@ -1,6 +1,7 @@
 // Merges two progress states (see docs/superpowers/specs/2026-10-06-iphone-mac-sync-design.md).
-// Every item carries a timestamp `t`; the newer one wins. merge is commutative and
-// idempotent, so devices that sync in any order end up with the same state.
+// Most items carry a timestamp `t` and the newer one wins; the best streak keeps the
+// highest value since the last reset. merge is commutative, associative and idempotent,
+// so devices that sync in any order end up with the same state.
 // Callers must treat the result as read-only: its entries are shared with the inputs.
 
 // JSON with sorted keys, so equal states always produce equal strings.
@@ -45,8 +46,8 @@ const valueOf = entry => (Number.isFinite(entry?.value) ? entry.value : 0);
 // in `bestStreakLater`. Without them, merging in a different order could lose a record.
 function mergeBest(sides, resetAt) {
   const candidates = sides
-    .flatMap(s => [s.bestStreak, ...(s.bestStreakLater ?? [])])
-    .filter(e => e && timeOf(e) >= resetAt);
+    .flatMap(s => [s.bestStreak, ...(Array.isArray(s.bestStreakLater) ? s.bestStreakLater : [])])
+    .filter(e => e && typeof e === "object" && timeOf(e) >= resetAt);
   candidates.push({ value: 0, t: resetAt });
   candidates.sort((x, y) =>
     valueOf(y) - valueOf(x) || timeOf(y) - timeOf(x) ||

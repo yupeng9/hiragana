@@ -208,3 +208,10 @@ test("a lower but later best streak survives a reset whatever the merge order", 
   assert.equal(left.bestStreak.value, 2);
   assert.equal(canonical(left), canonical(right));
 });
+
+test("a malformed bestStreakLater on one side does not throw", () => {
+  for (const bad of [5, "x", { value: 1 }, [null, 7, "y"]]) {
+    const m = merge(base({ bestStreak: { value: 4, t: 2 }, bestStreakLater: bad }), base());
+    assert.equal(m.bestStreak.value, 4);
+  }
+});
