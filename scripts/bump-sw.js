@@ -16,13 +16,13 @@ export function computeVersion(rootDir) {
   const hash = createHash("sha256");
   for (const f of files) {
     if (f === "./" || f === "sw.js") continue;
-    hash.update(f);
+    hash.update(f + "\0");
     hash.update(readFileSync(join(rootDir, f)));
   }
   return hash.digest("hex").slice(0, 12);
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const root = join(dirname(fileURLToPath(import.meta.url)), "..");
   const swPath = join(root, "sw.js");
   const version = computeVersion(root);
