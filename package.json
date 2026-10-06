@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test --test-timeout=20000"
+    "test": "node --test --test-timeout=20000",
+    "bump-sw": "node scripts/bump-sw.js"
   }
 }

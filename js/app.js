@@ -429,5 +429,9 @@ const config = loadConfig(localStorage);
 if (config) startSync(config).catch(e => console.error("sync failed", e)); else showStatus({ kind: "off" });
 
 if ("serviceWorker" in navigator) {
+  // Reload once when a new worker takes over so the whole new file set applies at once
+  // (not on the very first install, when there was no controller before).
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController) location.reload(); });
   navigator.serviceWorker.register("sw.js").catch(e => console.warn("Offline support unavailable:", e));
 }

@@ -18,6 +18,7 @@ body {
 header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 24px; border-bottom: 1px solid var(--line); background: var(--card);
+  padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right));
 }
 header h1 { margin: 0; font-size: 20px; }
 header h1 span { color: var(--accent); }
@@ -59,7 +60,9 @@ select { font-size: 14px; padding: 6px 8px; border-radius: 8px; border: 1px soli
   font-size: 48px; padding: 14px; border-radius: 14px; border: 2px solid var(--line);
   background: var(--card); cursor: pointer; position: relative;
 }
-.choices button:hover:not(:disabled) { border-color: var(--ink); }
+@media (hover: hover) {
+  .choices button:hover:not(:disabled) { border-color: var(--ink); }
+}
 .choices button small { position: absolute; top: 6px; left: 10px; font-size: 12px; color: var(--muted); }
 .choices button.correct { border-color: var(--good); background: #e9f5ed; }
 .choices button.wrong { border-color: var(--bad); background: #fbecea; }
@@ -102,9 +105,13 @@ table.chart th { color: var(--muted); font-weight: 500; font-size: 13px; }
   padding: 10px 12px; cursor: pointer; font: inherit; color: inherit;
 }
 .word { position: relative; }
-.word:hover { border-color: var(--ink); }
+@media (hover: hover) {
+  .word:hover { border-color: var(--ink); }
+}
 .word.locked { cursor: default; }
-.word.locked:hover { border-color: var(--line); }
+@media (hover: hover) {
+  .word.locked:hover { border-color: var(--line); }
+}
 .word.locked .wr { font-style: italic; }
 .word .wd { display: block; font-size: 12px; color: var(--muted); margin-top: 4px; }
 .star {
@@ -147,7 +154,10 @@ nav .ico { display: none; }
 
 /* ---------- iPhone / narrow screens ---------- */
 @media (max-width: 640px) {
-  header { padding: 10px 14px; padding-top: max(10px, env(safe-area-inset-top)); }
+  header {
+    padding: 10px 14px; padding-top: max(10px, env(safe-area-inset-top));
+    padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right));
+  }
   header h1 { font-size: 18px; }
   nav {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: flex;
@@ -181,4 +191,9 @@ nav .ico { display: none; }
   .word-list { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
   .word .wk { font-size: 22px; }
   .star { font-size: 22px; padding: 4px; }
+  .word { padding-right: 40px; }
+
+  .rows label, select { min-height: 44px; }
+  .star, #syncBadge { min-width: 44px; min-height: 44px; }
+  .controls label { min-height: 44px; display: inline-flex; align-items: center; }
 }
