@@ -44,7 +44,7 @@ export function migrateV1(v1) {
 
 const isObject = v => !!v && typeof v === "object" && !Array.isArray(v);
 
-const isValidV2 = v => isObject(v) && v.version === 2 &&
+export const isValidV2 = v => isObject(v) && v.version === 2 &&
   ["stats", "dictionary", "settings", "bestStreak"].every(k => isObject(v[k]));
 
 function parseJSON(raw) {

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GistClient, Syncer, connect, GIST_FILE } from "../js/sync.js";
+import { GistClient, Syncer, SyncError, connect, GIST_FILE } from "../js/sync.js";
 import { emptyState } from "../js/store.js";
 
 const reply = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
@@ -70,11 +70,11 @@ test("client reads and writes the progress file", async () => {
 });
 
 // Syncer tests use a fake client with an in-memory "remote".
-function harness({ remote = null, local = emptyState(), online = true, readError } = {}) {
+function harness({ remote = null, local = emptyState(), online = true, readError, writeError, extra = {} } = {}) {
   const h = { remote, local, statuses: [], writes: 0, reads: 0 };
   h.client = {
     read: async () => { h.reads++; if (readError) throw readError; return h.remote; },
-    write: async (_id, s) => { h.writes++; h.remote = JSON.parse(JSON.stringify(s)); },
+    write: async (_id, s) => { h.writes++; if (writeError) throw writeError; h.remote = JSON.parse(JSON.stringify(s)); },
   };
   h.syncer = new Syncer({
     client: h.client, gistId: "g1",
@@ -83,6 +83,7 @@ function harness({ remote = null, local = emptyState(), online = true, readError
     onStatus: s => h.statuses.push(s.kind),
     isOnline: () => online,
     delay: 0,
+    ...extra,
   });
   return h;
 }
@@ -120,6 +121,7 @@ test("a network failure mid-sync reports offline", async () => {
   const h = harness({ readError: Object.assign(new Error("offline"), { status: 0 }) });
   await h.syncer.run();
   assert.deepEqual(h.statuses, ["syncing", "offline"]);
+  h.syncer.stop(); // cancel the pending retry so the test process can exit
 });
 
 test("a rejected token stops automatic syncing", async () => {
@@ -137,4 +139,176 @@ test("a run requested during a sync causes exactly one more cycle", async () => 
   const third = h.syncer.run();
   await Promise.all([first, second, third]);
   assert.equal(h.reads, 2);
+});
+
+const tick = () => new Promise(r => setTimeout(r, 10));
+const statusError = status => Object.assign(new Error(`status ${status}`), { status });
+
+test("a rejected token (404 gist not found) stops automatic syncing", async () => {
+  const h = harness({ readError: statusError(404) });
+  await h.syncer.run();
+  await h.syncer.run();
+  assert.equal(h.reads, 1);
+  assert.deepEqual(h.statuses, ["syncing", "error"]);
+});
+
+test("a 401 while writing reports an error and stops the syncer", async () => {
+  const h = harness({ remote: withWord("あい", 9), local: withWord("かさ", 5), writeError: statusError(401) });
+  await h.syncer.run();
+  await h.syncer.run();
+  assert.equal(h.reads, 1);
+  assert.deepEqual(h.statuses, ["syncing", "error"]);
+});
+
+test("an exception escaping a cycle does not wedge later runs", async () => {
+  let calls = 0;
+  const h = harness({ extra: { onStatus: s => { if (calls++ === 0) throw new Error("ui broke"); } } });
+  await assert.rejects(h.syncer.run(), /ui broke/);
+  await h.syncer.run();
+  assert.equal(h.reads, 1);
+});
+
+test("stop() while a read is pending applies nothing, writes nothing and reports nothing", async () => {
+  const h = harness({ local: withWord("かさ", 5) });
+  let release;
+  h.client.read = () => new Promise(r => { h.reads++; release = () => r(withWord("あい", 9)); });
+  const before = h.local;
+  const run = h.syncer.run();
+  h.syncer.stop();
+  release();
+  await run;
+  assert.equal(h.local, before);
+  assert.equal(h.writes, 0);
+  assert.deepEqual(h.statuses, ["syncing"]);
+});
+
+test("stop() while a write is pending reports nothing afterwards", async () => {
+  const h = harness({ remote: withWord("あい", 9), local: withWord("かさ", 5) });
+  let release;
+  h.client.write = () => new Promise(r => { h.writes++; release = r; });
+  const run = h.syncer.run();
+  await tick();
+  h.syncer.stop();
+  release();
+  await run;
+  assert.deepEqual(h.statuses, ["syncing"]);
+});
+
+test("an error arriving after stop() is not reported", async () => {
+  const h = harness();
+  let fail;
+  h.client.read = () => new Promise((_, rej) => { h.reads++; fail = () => rej(statusError(401)); });
+  const run = h.syncer.run();
+  h.syncer.stop();
+  fail();
+  await run;
+  assert.deepEqual(h.statuses, ["syncing"]);
+});
+
+test("a remote data problem (status -1) reports an error, keeps syncing and never writes", async () => {
+  const local = withWord("かさ", 5);
+  const h = harness({ local, readError: new SyncError("bad file", -1) });
+  await h.syncer.run();
+  await h.syncer.run();
+  assert.equal(h.reads, 2);
+  assert.equal(h.writes, 0);
+  assert.equal(h.local, local);
+  assert.deepEqual(h.statuses, ["syncing", "error", "syncing", "error"]);
+});
+
+test("a network failure retries after retryDelay", async () => {
+  const h = harness({ remote: withWord("あい", 9), extra: { retryDelay: 0 } });
+  const read = h.client.read;
+  h.client.read = async id => { if (h.reads === 0) { h.reads++; throw statusError(0); } return read(id); };
+  await h.syncer.run();
+  await tick();
+  assert.equal(h.reads, 2);
+  assert.equal(h.statuses.at(-1), "ok");
+});
+
+test("the offline precheck does not schedule a retry", async () => {
+  const h = harness({ online: false, extra: { retryDelay: 0 } });
+  await h.syncer.run();
+  await tick();
+  assert.equal(h.reads, 0);
+  assert.deepEqual(h.statuses, ["offline"]);
+});
+
+test("stop() cancels a pending offline retry", async () => {
+  const h = harness({ readError: statusError(0), extra: { retryDelay: 5 } });
+  await h.syncer.run();
+  h.syncer.stop();
+  await tick();
+  assert.equal(h.reads, 1);
+});
+
+test("schedule() debounces several calls into one run", async () => {
+  const h = harness();
+  h.syncer.schedule();
+  h.syncer.schedule();
+  h.syncer.schedule();
+  await tick();
+  assert.equal(h.reads, 1);
+});
+
+test("stop() before a scheduled run fires prevents it", async () => {
+  const h = harness();
+  h.syncer.schedule();
+  h.syncer.stop();
+  await tick();
+  assert.equal(h.reads, 0);
+});
+
+// GistClient details
+const gistWith = content => fakeFetch({ "GET /gists/g1": () => reply(200, { files: { [GIST_FILE]: content } }) });
+const INVALID = "The sync file in your gist is not valid progress data. Fix or delete it, then Sync now.";
+
+test("reading a gist whose file holds invalid JSON is a remote data problem", async () => {
+  const client = new GistClient("tok", gistWith({ content: "{oops" }));
+  await assert.rejects(client.read("g1"), e => e.status === -1 && e.message === INVALID);
+});
+
+test("reading a gist whose file has the wrong shape is a remote data problem", async () => {
+  const client = new GistClient("tok", gistWith({ content: '{"settings":"x"}' }));
+  await assert.rejects(client.read("g1"), e => e.status === -1 && e.message === INVALID);
+});
+
+test("reading a gist without the progress file gives null", async () => {
+  const client = new GistClient("tok", fakeFetch({ "GET /gists/g1": () => reply(200, { files: { "notes.md": {} } }) }));
+  assert.equal(await client.read("g1"), null);
+});
+
+test("reading a truncated progress file is rejected", async () => {
+  const client = new GistClient("tok", gistWith({ truncated: true, content: "{" }));
+  await assert.rejects(client.read("g1"), e => e.status === -1 && /too large/.test(e.message));
+});
+
+test("client trims the token and sends the API version and no-store", async () => {
+  const fetch = fakeFetch({ "GET /user": () => reply(200, { login: "x" }) });
+  await new GistClient("  tok\n", fetch).user();
+  const { headers, cache } = fetch.calls[0].opts;
+  assert.equal(headers.Authorization, "Bearer tok");
+  assert.equal(headers["X-GitHub-Api-Version"], "2022-11-28");
+  assert.equal(cache, "no-store");
+});
+
+test("connect explains a token that cannot create gists", async () => {
+  for (const status of [403, 404]) {
+    const fetch = fakeFetch({
+      "GET /user": () => reply(200, { login: "x" }),
+      "GET /gists?per_page=100&page=1": () => reply(200, []),
+      "POST /gists": () => reply(status, {}),
+    });
+    await assert.rejects(connect(new GistClient("tok", fetch), emptyState()),
+      e => e.status === status && /classic token with the gist scope/.test(e.message));
+  }
+});
+
+test("findGist looks at page 2 when page 1 is full of other gists", async () => {
+  const full = Array.from({ length: 100 }, (_, i) => ({ id: `o${i}`, files: { "a.txt": {} } }));
+  const fetch = fakeFetch({
+    "GET /gists?per_page=100&page=1": () => reply(200, full),
+    "GET /gists?per_page=100&page=2": () => reply(200, [{ id: "g2", files: { [GIST_FILE]: {} } }]),
+  });
+  assert.equal(await new GistClient("tok", fetch).findGist(), "g2");
 });

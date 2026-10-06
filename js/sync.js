@@ -1,12 +1,14 @@
 // Syncs progress through one file in a secret GitHub Gist.
 import { merge, canonical } from "./merge.js";
+import { isValidV2 } from "./store.js";
 
 const API = "https://api.github.com";
 export const GIST_FILE = "hiragana-progress.json";
 // Per-device sync settings { token, gistId, login }; stored locally, never synced.
 export const CONFIG_KEY = "hiragana-sync";
 
-// status 0 = network failure (offline); otherwise the HTTP status.
+// status 0 = network failure (offline); -1 = the gist's file is unusable (a remote data
+// problem, worth retrying later); otherwise the HTTP status.
 export class SyncError extends Error {
   constructor(message, status) {
     super(message);
@@ -21,7 +23,7 @@ const MESSAGES = {
 
 export class GistClient {
   constructor(token, fetchFn = (...args) => globalThis.fetch(...args)) {
-    this.token = token;
+    this.token = token.trim();
     this.fetch = fetchFn;
   }
 
@@ -34,6 +36,7 @@ export class GistClient {
         headers: {
           Authorization: `Bearer ${this.token}`,
           Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
           ...(body ? { "Content-Type": "application/json" } : {}),
         },
         body: body ? JSON.stringify(body) : undefined,
@@ -73,8 +76,19 @@ export class GistClient {
 
   async read(gistId) {
     const gist = await this.request(`/gists/${gistId}`);
-    const file = gist.files[GIST_FILE];
-    return file ? JSON.parse(file.content) : null;
+    const file = gist.files?.[GIST_FILE];
+    if (!file) return null;
+    if (file.truncated) throw new SyncError("The sync file is too large to read.", -1);
+    let parsed;
+    try {
+      parsed = JSON.parse(file.content);
+    } catch {
+      parsed = undefined;
+    }
+    if (!isValidV2(parsed)) {
+      throw new SyncError("The sync file in your gist is not valid progress data. Fix or delete it, then Sync now.", -1);
+    }
+    return parsed;
   }
 
   write(gistId, state) {
@@ -88,15 +102,25 @@ export class GistClient {
 // Checks the token and finds this user's progress gist, creating it on first use.
 export async function connect(client, state) {
   const { login } = await client.user();
-  const gistId = (await client.findGist()) ?? (await client.createGist(state));
+  let gistId = await client.findGist();
+  if (gistId === null) {
+    try {
+      gistId = await client.createGist(state);
+    } catch (e) {
+      if (e.status === 403 || e.status === 404) {
+        throw new SyncError("This token can't create gists. Create a classic token with the gist scope.", e.status);
+      }
+      throw e;
+    }
+  }
   return { login, gistId };
 }
 
 // Runs pull → merge → push cycles, one at a time.
 // onStatus receives { kind: "syncing" | "ok" | "offline" | "error", at?, message? }.
 export class Syncer {
-  constructor({ client, gistId, getState, applyState, onStatus, isOnline = () => true, delay = 3000 }) {
-    Object.assign(this, { client, gistId, getState, applyState, onStatus, isOnline, delay });
+  constructor({ client, gistId, getState, applyState, onStatus, isOnline = () => true, delay = 3000, retryDelay = 30000 }) {
+    Object.assign(this, { client, gistId, getState, applyState, onStatus, isOnline, delay, retryDelay });
     this.active = null;     // promise of the running cycle loop
     this.again = false;     // a run was requested while one was active
     this.stopped = false;   // set after a 401 or stop(); needs a new Syncer to resume
@@ -107,7 +131,7 @@ export class Syncer {
   schedule() {
     if (this.stopped) return;
     clearTimeout(this.timer);
-    this.timer = setTimeout(() => this.run(), this.delay);
+    this.timer = setTimeout(() => this.run().catch(() => {}), this.delay);
   }
 
   run() {
@@ -117,11 +141,14 @@ export class Syncer {
       return this.active;
     }
     this.active = (async () => {
-      do {
-        this.again = false;
-        await this.cycle();
-      } while (this.again && !this.stopped);
-      this.active = null;
+      try {
+        do {
+          this.again = false;
+          await this.cycle();
+        } while (this.again && !this.stopped);
+      } finally {
+        this.active = null;
+      }
     })();
     return this.active;
   }
@@ -134,13 +161,20 @@ export class Syncer {
     this.onStatus({ kind: "syncing" });
     try {
       const remote = await this.client.read(this.gistId);
+      if (this.stopped) return;
       const merged = remote ? merge(this.getState(), remote) : this.getState();
       this.applyState(merged);
-      if (!remote || canonical(merged) !== canonical(remote)) await this.client.write(this.gistId, merged);
+      if (!remote || canonical(merged) !== canonical(remote)) {
+        await this.client.write(this.gistId, merged);
+        if (this.stopped) return;
+      }
       this.onStatus({ kind: "ok", at: new Date() });
     } catch (e) {
+      if (this.stopped) return;  // stop() was called while this cycle was in flight
       if (e.status === 0) {
         this.onStatus({ kind: "offline" });
+        clearTimeout(this.timer);
+        this.timer = setTimeout(() => this.run().catch(() => {}), this.retryDelay);
         return;
       }
       if (e.status === 401 || e.status === 404) this.stopped = true;
