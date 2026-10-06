@@ -71,8 +71,8 @@ Every mergeable item carries a timestamp `t` (ms since epoch) of its last change
 
 **Migration:** on first load of the new version, the existing v1 `localStorage` data
 (`hiragana-practice-v1`) is converted to v2. Settings, stats and best streak get `t = 1`
-(above a fresh device's 0, below any real change), not the migration time, so migrated data
-never beats real v2 activity. Stats that were never answered are skipped. Dictionary entries
+(above a fresh device's 0, below any real change), not the migration time, so migrated items
+never beat real v2 settings or a reset, and for stats the bigger answer history wins. Stats that were never answered are skipped. Dictionary entries
 keep their original saved time.
 
 ## 3. Sync

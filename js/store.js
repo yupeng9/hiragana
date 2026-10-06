@@ -5,7 +5,8 @@ import { DEFAULT_ROWS, MAX_BOX } from "./data.js";
 export const STORE_KEY = "hiragana-practice-v2";
 export const LEGACY_KEY = "hiragana-practice-v1";
 const CORRUPT_SUFFIX = "-corrupt";
-// Migrated v1 items get t = 1: above a fresh device's 0, below any real change.
+// Migrated v1 items get t = 1: above a fresh device's 0, below any real change, so they
+// never beat real v2 settings or a reset (and for stats the bigger answer history wins).
 const MIGRATED_T = 1;
 const UNSEEN = Object.freeze({ box: 0, seen: 0, correct: 0, t: 0 });
 
@@ -25,7 +26,7 @@ export function emptyState() {
 export function migrateV1(v1) {
   const s = emptyState();
   s.settings = {
-    rows: v1.rows || [...DEFAULT_ROWS],
+    rows: Array.isArray(v1.rows) ? v1.rows : [...DEFAULT_ROWS],
     mode: v1.mode || "type",
     autoSpeak: v1.autoSpeak ?? false,
     t: MIGRATED_T,
@@ -52,8 +53,12 @@ function parseJSON(raw) {
 
 // Keep the unreadable value under another key so it is not lost, then start empty.
 function backUpCorrupt(storage, key, raw) {
-  storage.setItem(key + CORRUPT_SUFFIX, raw);
-  console.error(`Could not read saved progress in ${key}; a copy was kept in ${key}${CORRUPT_SUFFIX}.`);
+  try {
+    storage.setItem(key + CORRUPT_SUFFIX, raw);
+    console.error(`Could not read saved progress in ${key}; a copy was kept in ${key}${CORRUPT_SUFFIX}.`);
+  } catch {
+    console.error(`Could not read saved progress in ${key}, and the backup copy could not be saved.`);
+  }
   return emptyState();
 }
 
@@ -61,7 +66,11 @@ export function loadState(storage) {
   const v2 = storage.getItem(STORE_KEY);
   if (v2 !== null) {
     const parsed = parseJSON(v2);
-    return isValidV2(parsed) ? { ...emptyState(), ...parsed } : backUpCorrupt(storage, STORE_KEY, v2);
+    if (!isValidV2(parsed)) return backUpCorrupt(storage, STORE_KEY, v2);
+    const defaults = emptyState();
+    const settings = { ...defaults.settings, ...parsed.settings };
+    if (!Array.isArray(settings.rows)) settings.rows = defaults.settings.rows;
+    return { ...defaults, ...parsed, settings };
   }
   const v1 = storage.getItem(LEGACY_KEY);
   if (v1 === null) return emptyState();

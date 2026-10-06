@@ -90,8 +90,8 @@ const valueOf = entry => (Number.isFinite(entry?.value) ? entry.value : 0);
 // in `bestStreakLater`. Without them, merging in a different order could lose a record.
 function mergeBest(sides, resetAt) {
   const candidates = sides
-    .flatMap(s => [s.bestStreak, ...(Array.isArray(s.bestStreakLater) ? s.bestStreakLater : [])])
-    .filter(e => e && typeof e === "object" && timeOf(e) >= resetAt);
+    .flatMap(s => recordsOf(s.bestStreak, s.bestStreakLater))
+    .filter(e => timeOf(e) >= resetAt);
   candidates.push({ value: 0, t: resetAt });
   candidates.sort((x, y) =>
     valueOf(y) - valueOf(x) || timeOf(y) - timeOf(x) ||

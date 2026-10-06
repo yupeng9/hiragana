@@ -198,3 +198,27 @@ test("a reset merged with an older remote state leaves no stats and best 0", () 
     assert.equal(m.bestStreak.value, 0);
   }
 });
+
+test("a v2 state with empty settings gets the default settings", () => {
+  const v2 = { version: 2, stats: {}, dictionary: {}, settings: {}, bestStreak: { value: 0, t: 0 } };
+  const s = loadState(memoryStorage({ [STORE_KEY]: JSON.stringify(v2) }));
+  assert.deepEqual(s.settings, { rows: DEFAULT_ROWS, mode: "type", autoSpeak: false, t: 0 });
+});
+
+test("a v2 state whose rows are not an array gets the default rows", () => {
+  const v2 = { version: 2, stats: {}, dictionary: {}, settings: { rows: "a", mode: "pick", t: 3 }, bestStreak: { value: 0, t: 0 } };
+  const s = loadState(memoryStorage({ [STORE_KEY]: JSON.stringify(v2) }));
+  assert.deepEqual(s.settings, { rows: DEFAULT_ROWS, mode: "pick", autoSpeak: false, t: 3 });
+});
+
+test("v1 rows that are not an array fall back to the default rows", () => {
+  const s = loadState(memoryStorage({ [LEGACY_KEY]: JSON.stringify({ rows: "a" }) }));
+  assert.deepEqual(s.settings.rows, DEFAULT_ROWS);
+});
+
+test("a storage that cannot save the backup still gives an empty state", () => {
+  const storage = memoryStorage({ [STORE_KEY]: "{oops" });
+  storage.setItem = () => { throw new Error("QuotaExceededError"); };
+  const s = quietly(() => loadState(storage));
+  assert.equal(canonical(s), canonical(emptyState()));
+});
