@@ -54,7 +54,6 @@ export class GistClient {
         headers: {
           Authorization: `Bearer ${this.token}`,
           Accept: "application/vnd.github+json",
-          "X-GitHub-Api-Version": "2022-11-28",
           ...(body ? { "Content-Type": "application/json" } : {}),
         },
         body: body ? JSON.stringify(body) : undefined,
@@ -119,7 +118,13 @@ export class GistClient {
 
 // Checks the token and finds this user's progress gist, creating it on first use.
 export async function connect(client, state) {
-  const { login } = await client.user();
+  let login;
+  try {
+    ({ login } = await client.user());
+  } catch (e) {
+    if (e.status === 401) throw new SyncError("GitHub rejected this token. Check it and try again.", 401);
+    throw e;
+  }
   let gistId = await client.findGist();
   if (gistId === null) {
     try {

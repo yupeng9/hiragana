@@ -102,7 +102,7 @@
     <p class="sync-status" id="syncStatus">Sync not set up</p>
     <div id="syncSetup">
       <ol class="steps">
-        <li><a href="https://github.com/settings/tokens/new?scopes=gist&amp;description=Hiragana%20Practice%20sync" target="_blank" rel="noopener">Create a GitHub token</a> with only the <b>gist</b> scope.</li>
+        <li><a href="https://github.com/settings/tokens/new?scopes=gist&amp;description=Hiragana%20Practice%20sync" target="_blank" rel="noopener">Create a GitHub token</a> (classic) with only the <b>gist</b> scope, and set <b>Expiration</b> to "No expiration" or a long period. Otherwise sync stops when the token expires (GitHub's default is 30 days).</li>
         <li>Paste it below and tap <b>Connect</b>. Do the same on your other device with the same token.</li>
       </ol>
       <input id="tokenInput" class="token-input" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ghp_…">

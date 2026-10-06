@@ -283,13 +283,26 @@ test("reading a truncated progress file is rejected", async () => {
   await assert.rejects(client.read("g1"), e => e.status === -1 && /too large/.test(e.message));
 });
 
-test("client trims the token and sends the API version and no-store", async () => {
+test("client trims the token and sends no-store and no API-version header", async () => {
   const fetch = fakeFetch({ "GET /user": () => reply(200, { login: "x" }) });
   await new GistClient("  tok\n", fetch).user();
   const { headers, cache } = fetch.calls[0].opts;
   assert.equal(headers.Authorization, "Bearer tok");
-  assert.equal(headers["X-GitHub-Api-Version"], "2022-11-28");
+  assert.equal("X-GitHub-Api-Version" in headers, false);
   assert.equal(cache, "no-store");
+});
+
+test("connect reports a rejected token without mentioning Disconnect", async () => {
+  const fetch = fakeFetch({ "GET /user": () => reply(401, {}) });
+  await assert.rejects(connect(new GistClient("tok", fetch), emptyState()),
+    e => e instanceof SyncError && e.status === 401 &&
+      e.message === "GitHub rejected this token. Check it and try again." && !/Disconnect/.test(e.message));
+  assert.equal(fetch.calls.length, 1);
+});
+
+test("connect passes other /user failures through unchanged", async () => {
+  const offline = async () => { throw new TypeError("network"); };
+  await assert.rejects(connect(new GistClient("tok", offline), emptyState()), e => e.status === 0);
 });
 
 test("connect explains a token that cannot create gists", async () => {

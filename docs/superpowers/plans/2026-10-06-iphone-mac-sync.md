@@ -1465,7 +1465,7 @@ fs.writeFileSync(".playwright-mcp/smoke.js", `async (page) => {
 '
 ```
 
-Run via MCP: `browser_run_code_unsafe` with `filename: /Users/yupeng/personal/japanese/.playwright-mcp/smoke.js`
+Run via MCP: `browser_run_code_unsafe` with `filename: .playwright-mcp/smoke.js`
 
 Expected: `feedback` starts with `Not quite`, `examplesRevealed: true`, `best: "4"`, `dict` starts with `1 saved word`, `sync: "Sync not set up"`, `v2` contains `かさ` with `t: 1700000000000`, `errors: []` (a service-worker 404 warning is acceptable until Task 7).
 
@@ -1529,7 +1529,7 @@ git commit -m "Split app into modules, use timestamped store, add sync panel"
 
 1. Re-run the Task 5 Step 6 generator command so `.playwright-mcp/smoke.js` includes the new CSS.
 2. `browser_resize` to width 390, height 844.
-3. `browser_run_code_unsafe` with `filename: /Users/yupeng/personal/japanese/.playwright-mcp/smoke.js` (loads the app at iPhone size).
+3. `browser_run_code_unsafe` with `filename: .playwright-mcp/smoke.js` (loads the app at iPhone size).
 4. `browser_run_code_unsafe` with this code:
 
 ```js
@@ -1537,7 +1537,7 @@ async (page) => {
   const shots = {};
   for (const view of ["practice", "chart", "words", "dictionary", "sync"]) {
     await page.click(`[data-view=${view}]`);
-    await page.screenshot({ path: `/Users/yupeng/personal/japanese/.playwright-mcp/m-${view}.png`, fullPage: true });
+    await page.screenshot({ path: `.playwright-mcp/m-${view}.png`, fullPage: true });
   }
   return {
     overflow: await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth),
@@ -1591,7 +1591,7 @@ Render a 512×512 icon with Playwright MCP (`browser_run_code_unsafe`, inline `c
 async (page) => {
   await page.setViewportSize({ width: 512, height: 512 });
   await page.setContent(`<body style="margin:0"><div id="i" style="width:512px;height:512px;background:#c8433a;color:#fff;display:flex;align-items:center;justify-content:center;font:600 340px 'Hiragino Sans','Hiragino Kaku Gothic ProN',sans-serif">あ</div></body>`);
-  await page.locator("#i").screenshot({ path: "/Users/yupeng/personal/japanese/icons/icon-512.png", scale: "css" });
+  await page.locator("#i").screenshot({ path: "icons/icon-512.png", scale: "css" });
   return "ok";
 }
 ```
@@ -1678,7 +1678,7 @@ fs.writeFileSync(".playwright-mcp/pwa.js", `async (page) => {
 '
 ```
 
-Run via MCP with `filename: /Users/yupeng/personal/japanese/.playwright-mcp/pwa.js`.
+Run via MCP with `filename: .playwright-mcp/pwa.js`.
 Expected: `cached: 12`. (If the Playwright browser refuses service workers on routed origins, record that and rely on the real check against GitHub Pages in Task 8, Step 4.)
 
 - [ ] **Step 5: Commit**
@@ -1692,7 +1692,9 @@ git commit -m "Make the app installable and usable offline"
 
 ### Task 8: Publish to GitHub Pages
 
-All `gh` commands target **github.com** (`GH_HOST=github.com`), account `yupeng9`; never the Apple-internal hosts.
+All `gh` commands target **github.com** (`GH_HOST=github.com`), account `yupeng9` (the gh CLI may be logged in to several hosts; target github.com).
+
+> **Outdated (see the current code):** the service worker cache is now named `hiragana-<VERSION>` (VERSION is a content hash from `npm run bump-sw`), not `hiragana-v1`, and the test count is now 88+, not 30. Adjust the Step 1 and Step 4 expectations accordingly.
 
 - [ ] **Step 1: Final checks**
 
