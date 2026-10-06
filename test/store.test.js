@@ -1,10 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  STORE_KEY, LEGACY_KEY, loadState, saveState, statOf, isSaved, savedWords,
+  STORE_KEY, LEGACY_KEY, emptyState, loadState, saveState, statOf, isSaved, savedWords,
   toggleWord, recordAnswer, updateBest, setSettings, resetProgress,
 } from "../js/store.js";
 import { DEFAULT_ROWS, MAX_BOX } from "../js/data.js";
+import { merge, canonical } from "../js/merge.js";
 
 const memoryStorage = (data = {}) => ({
   data,
@@ -12,8 +13,14 @@ const memoryStorage = (data = {}) => ({
   setItem(k, v) { this.data[k] = String(v); },
 });
 
+const quietly = fn => {
+  const orig = console.error;
+  console.error = () => {};
+  try { return fn(); } finally { console.error = orig; }
+};
+
 test("a new device starts empty with every timestamp at 0", () => {
-  const s = loadState(memoryStorage(), 5000);
+  const s = loadState(memoryStorage());
   assert.deepEqual(s.settings, { rows: DEFAULT_ROWS, mode: "type", autoSpeak: false, t: 0 });
   assert.deepEqual(s.bestStreak, { value: 0, t: 0 });
   assert.deepEqual(s.stats, {});
@@ -27,20 +34,20 @@ test("migrates v1 data, keeping saved-word times", () => {
     stats: { か: { box: 2, seen: 3, correct: 2 } },
     dictionary: { かさ: 1700000000000 },
   };
-  const s = loadState(memoryStorage({ [LEGACY_KEY]: JSON.stringify(v1) }), 5000);
-  assert.deepEqual(s.settings, { rows: ["a", "ka"], mode: "pick", autoSpeak: true, t: 5000 });
-  assert.deepEqual(s.stats.か, { box: 2, seen: 3, correct: 2, t: 5000 });
+  const s = loadState(memoryStorage({ [LEGACY_KEY]: JSON.stringify(v1) }));
+  assert.deepEqual(s.settings, { rows: ["a", "ka"], mode: "pick", autoSpeak: true, t: 1 });
+  assert.deepEqual(s.stats.か, { box: 2, seen: 3, correct: 2, t: 1 });
   assert.deepEqual(s.dictionary.かさ, { t: 1700000000000, deleted: false });
-  assert.deepEqual(s.bestStreak, { value: 7, t: 5000 });
+  assert.deepEqual(s.bestStreak, { value: 7, t: 1 });
 });
 
 test("prefers saved v2 data over v1", () => {
   const storage = memoryStorage({ [LEGACY_KEY]: JSON.stringify({ bestStreak: 7 }) });
-  const s = loadState(storage, 1);
+  const s = loadState(storage);
   s.bestStreak = { value: 3, t: 9 };
   saveState(storage, s);
   assert.equal(JSON.parse(storage.getItem(STORE_KEY)).bestStreak.value, 3);
-  assert.equal(loadState(storage, 2).bestStreak.value, 3);
+  assert.equal(loadState(storage).bestStreak.value, 3);
 });
 
 test("statOf reads without creating entries", () => {
@@ -98,11 +105,96 @@ test("resetProgress clears stats and best streak but keeps saved words", () => {
   recordAnswer(s, "か", true, 10);
   updateBest(s, 5, 10);
   s.bestStreakLater = [{ value: 2, t: 12 }];
+  s.statsLater = { か: [{ box: 0, seen: 1, correct: 0, t: 12 }] };
   toggleWord(s, "かさ", 10);
   resetProgress(s, 50);
   assert.deepEqual(s.stats, {});
   assert.deepEqual(s.bestStreak, { value: 0, t: 50 });
   assert.equal(s.bestStreakLater, undefined);
+  assert.equal(s.statsLater, undefined);
   assert.equal(s.resetAt, 50);
   assert.equal(isSaved(s, "かさ"), true);
+});
+
+test("migration skips v1 stats that were never answered and coerces fields", () => {
+  const v1 = { stats: {
+    か: { box: 2, seen: 3, correct: 2 },
+    さ: { box: 0, seen: 0, correct: 0 },
+    た: { box: "x", seen: 2, correct: undefined },
+  } };
+  const s = loadState(memoryStorage({ [LEGACY_KEY]: JSON.stringify(v1) }));
+  assert.deepEqual(Object.keys(s.stats).sort(), ["か", "た"]);
+  assert.deepEqual(s.stats.た, { box: 0, seen: 2, correct: 0, t: 1 });
+});
+
+test("corrupt v2 JSON gives an empty state and keeps a backup", () => {
+  const storage = memoryStorage({ [STORE_KEY]: "{oops", [LEGACY_KEY]: JSON.stringify({ bestStreak: 7 }) });
+  const s = quietly(() => loadState(storage));
+  assert.equal(canonical(s), canonical(emptyState()));
+  assert.equal(storage.getItem("hiragana-practice-v2-corrupt"), "{oops");
+});
+
+test('"null" in v2 gives an empty state and keeps a backup', () => {
+  const storage = memoryStorage({ [STORE_KEY]: "null" });
+  const s = quietly(() => loadState(storage));
+  assert.equal(canonical(s), canonical(emptyState()));
+  assert.equal(storage.getItem("hiragana-practice-v2-corrupt"), "null");
+});
+
+test("a v2 state of the wrong shape counts as corrupt", () => {
+  const storage = memoryStorage({ [STORE_KEY]: JSON.stringify({ version: 2, stats: [], dictionary: {}, settings: {}, bestStreak: {} }) });
+  const s = quietly(() => loadState(storage));
+  assert.equal(canonical(s), canonical(emptyState()));
+  assert.ok(storage.getItem("hiragana-practice-v2-corrupt"));
+});
+
+test("corrupt v1 JSON gives an empty state and keeps a backup", () => {
+  const storage = memoryStorage({ [LEGACY_KEY]: "not json" });
+  const s = quietly(() => loadState(storage));
+  assert.equal(canonical(s), canonical(emptyState()));
+  assert.equal(storage.getItem("hiragana-practice-v1-corrupt"), "not json");
+});
+
+test('"null" in v1 gives an empty state and keeps a backup', () => {
+  const storage = memoryStorage({ [LEGACY_KEY]: "null" });
+  const s = quietly(() => loadState(storage));
+  assert.equal(canonical(s), canonical(emptyState()));
+  assert.equal(storage.getItem("hiragana-practice-v1-corrupt"), "null");
+});
+
+test("a valid v2 state with a missing top-level field is filled in", () => {
+  const partial = { version: 2, stats: {}, dictionary: {}, settings: { rows: ["a"], mode: "type", autoSpeak: false, t: 4 }, bestStreak: { value: 1, t: 4 } };
+  const s = loadState(memoryStorage({ [STORE_KEY]: JSON.stringify(partial) }));
+  assert.equal(s.resetAt, 0);
+  assert.deepEqual(s.bestStreak, { value: 1, t: 4 });
+});
+
+test("a fresh device merged with a remote state equals the remote state", () => {
+  const remote = loadState(memoryStorage());
+  recordAnswer(remote, "か", true, 100);
+  toggleWord(remote, "かさ", 100);
+  updateBest(remote, 4, 100);
+  setSettings(remote, { mode: "pick" }, 100);
+  const fresh = loadState(memoryStorage());
+  assert.equal(canonical(merge(fresh, remote)), canonical(remote));
+  assert.equal(canonical(merge(remote, fresh)), canonical(remote));
+});
+
+test("a migrated v1 state does not override real v2 progress", () => {
+  const migrated = loadState(memoryStorage({ [LEGACY_KEY]: JSON.stringify({ mode: "pick", bestStreak: 2 }) }));
+  const remote = loadState(memoryStorage());
+  setSettings(remote, { mode: "type" }, 100);
+  assert.equal(merge(migrated, remote).settings.mode, "type");
+});
+
+test("a reset merged with an older remote state leaves no stats and best 0", () => {
+  const local = loadState(memoryStorage());
+  resetProgress(local, 50);
+  const remote = loadState(memoryStorage());
+  recordAnswer(remote, "か", true, 40);
+  remote.bestStreak = { value: 9, t: 40 };
+  for (const m of [merge(local, remote), merge(remote, local)]) {
+    assert.deepEqual(m.stats, {});
+    assert.equal(m.bestStreak.value, 0);
+  }
 });

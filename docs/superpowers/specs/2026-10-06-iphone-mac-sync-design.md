@@ -53,7 +53,11 @@ Every mergeable item carries a timestamp `t` (ms since epoch) of its last change
   `t`). A lower record with a later `t` is kept in `bestStreakLater` (merge-only, optional),
   because it survives a reset that wipes the higher, older one; this keeps `merge`
   associative.
-- **stats:** per kana, keep the entry with the larger `t`; drop entries with `t < resetAt`.
+- **stats:** per kana, drop entries with `t < resetAt`, then keep the entry with more
+  answers (`seen`); ties go to the larger `t`. This stops a new device that answered once
+  before its first sync from overwriting a long history. As with the best streak, an entry
+  with fewer answers but a later `t` is kept in `statsLater` (merge-only, optional, a map
+  of kana to entries), because it survives a reset that wipes the bigger, older one.
 - **dictionary:** per word, keep the entry with the larger `t`. Removing a word sets
   `deleted: true` (a tombstone), so a removal on one device wins over an older save on the
   other. Tombstones are kept (they are tiny).
@@ -66,8 +70,10 @@ Every mergeable item carries a timestamp `t` (ms since epoch) of its last change
   `merge(a, a)` equals `a`.
 
 **Migration:** on first load of the new version, the existing v1 `localStorage` data
-(`hiragana-practice-v1`) is converted to v2. Every item gets `t` = migration time, and
-dictionary entries keep their original saved time.
+(`hiragana-practice-v1`) is converted to v2. Settings, stats and best streak get `t = 1`
+(above a fresh device's 0, below any real change), not the migration time, so migrated data
+never beats real v2 activity. Stats that were never answered are skipped. Dictionary entries
+keep their original saved time.
 
 ## 3. Sync
 

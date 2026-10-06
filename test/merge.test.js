@@ -30,7 +30,7 @@ test("a save after a removal wins", () => {
   assert.equal(merge(a, b).dictionary.かさ.deleted, false);
 });
 
-test("newer stats win per character", () => {
+test("stats are chosen per character", () => {
   const a = base({ stats: {
     か: { box: 1, seen: 1, correct: 1, t: 10 },
     さ: { box: 2, seen: 2, correct: 2, t: 10 },
@@ -213,5 +213,45 @@ test("a malformed bestStreakLater on one side does not throw", () => {
   for (const bad of [5, "x", { value: 1 }, [null, 7, "y"]]) {
     const m = merge(base({ bestStreak: { value: 4, t: 2 }, bestStreakLater: bad }), base());
     assert.equal(m.bestStreak.value, 4);
+  }
+});
+
+test("the stats entry with more answers wins, whatever its timestamp", () => {
+  const fresh = { box: 0, seen: 1, correct: 0, t: 3000 };
+  const long = { box: 4, seen: 50, correct: 40, t: 1000 };
+  assert.deepEqual(merge(base({ stats: { か: fresh } }), base({ stats: { か: long } })).stats.か, long);
+  assert.deepEqual(merge(base({ stats: { か: long } }), base({ stats: { か: fresh } })).stats.か, long);
+});
+
+test("with equal answer counts the newer stats entry wins", () => {
+  const older = { box: 1, seen: 3, correct: 2, t: 10 };
+  const newerEntry = { box: 2, seen: 3, correct: 3, t: 20 };
+  assert.deepEqual(merge(base({ stats: { か: older } }), base({ stats: { か: newerEntry } })).stats.か, newerEntry);
+  assert.deepEqual(merge(base({ stats: { か: newerEntry } }), base({ stats: { か: older } })).stats.か, newerEntry);
+});
+
+test("a long history from before a reset does not beat a stats entry after it", () => {
+  const old = { box: 4, seen: 50, correct: 40, t: 10 };
+  const after = { box: 1, seen: 1, correct: 1, t: 60 };
+  const a = base({ stats: { か: old } });
+  const b = base({ resetAt: 50, stats: { か: after } });
+  assert.deepEqual(merge(a, b).stats.か, after);
+  assert.deepEqual(merge(b, a).stats.か, after);
+});
+
+test("a fewer-answers entry that is later survives a reset whatever the merge order", () => {
+  const a = base({ stats: { か: { box: 3, seen: 3, correct: 3, t: 1 } } });
+  const b = base({ stats: { か: { box: 1, seen: 1, correct: 1, t: 5 } } });
+  const c = base({ resetAt: 5 });
+  const left = merge(merge(a, b), c);
+  const right = merge(a, merge(b, c));
+  assert.equal(left.stats.か.seen, 1);
+  assert.equal(canonical(left), canonical(right));
+});
+
+test("a malformed statsLater on one side does not throw", () => {
+  for (const bad of [5, "x", [1], { か: 7 }, { か: [null, 7] }]) {
+    const m = merge(base({ stats: { か: { box: 1, seen: 2, correct: 1, t: 3 } }, statsLater: bad }), base());
+    assert.equal(m.stats.か.seen, 2);
   }
 });
