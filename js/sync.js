@@ -123,7 +123,7 @@ export class Syncer {
     Object.assign(this, { client, gistId, getState, applyState, onStatus, isOnline, delay, retryDelay });
     this.active = null;     // promise of the running cycle loop
     this.again = false;     // a run was requested while one was active
-    this.stopped = false;   // set after a 401 or stop(); needs a new Syncer to resume
+    this.stopped = false;   // set after a 401/404 or stop(); needs a new Syncer to resume
     this.timer = null;
   }
 
@@ -131,7 +131,7 @@ export class Syncer {
   schedule() {
     if (this.stopped) return;
     clearTimeout(this.timer);
-    this.timer = setTimeout(() => this.run().catch(() => {}), this.delay);
+    this.timer = setTimeout(() => this.run().catch(e => console.error("sync failed", e)), this.delay);
   }
 
   run() {
@@ -174,7 +174,7 @@ export class Syncer {
       if (e.status === 0) {
         this.onStatus({ kind: "offline" });
         clearTimeout(this.timer);
-        this.timer = setTimeout(() => this.run().catch(() => {}), this.retryDelay);
+        this.timer = setTimeout(() => this.run().catch(e => console.error("sync failed", e)), this.retryDelay);
         return;
       }
       if (e.status === 401 || e.status === 404) this.stopped = true;
