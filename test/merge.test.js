@@ -48,7 +48,7 @@ test("newer settings win", () => {
 });
 
 test("a reset on one device clears older stats and best streak", () => {
-  const a = base({ resetAt: 50, bestStreak: { value: 0, t: 50 } });
+  const a = base({ resetAt: 50, bestStreak: { value: 0, t: 0 } });
   const b = base({
     stats: {
       か: { box: 3, seen: 3, correct: 3, t: 40 },
@@ -89,4 +89,122 @@ test("is commutative and idempotent, including ties", () => {
 
 test("canonical ignores key order", () => {
   assert.equal(canonical({ b: 1, a: { d: 2, c: [3] } }), canonical({ a: { c: [3], d: 2 }, b: 1 }));
+});
+
+test("a stats entry stamped exactly at the reset time is kept", () => {
+  const a = base({ resetAt: 50 });
+  const b = base({
+    stats: {
+      か: { box: 1, seen: 1, correct: 1, t: 50 },
+      さ: { box: 1, seen: 1, correct: 1, t: 49 },
+    },
+  });
+  assert.deepEqual(Object.keys(merge(a, b).stats), ["か"]);
+  assert.deepEqual(Object.keys(merge(b, a).stats), ["か"]);
+});
+
+test("an entry without a timestamp merges the same in both orders", () => {
+  const noT = { box: 1, seen: 1, correct: 1 };
+  const withT = { box: 2, seen: 2, correct: 2, t: 5 };
+  const a = base({ stats: { か: noT } });
+  const b = base({ stats: { か: withT } });
+  assert.deepEqual(merge(a, b).stats.か, withT);
+  assert.deepEqual(merge(b, a).stats.か, withT);
+  const c = base({ stats: { か: { box: 1, seen: 1, correct: 1, t: "x" } } });
+  assert.equal(canonical(merge(c, b)), canonical(merge(b, c)));
+});
+
+test("a state with missing sections merges in both orders and keeps the other data", () => {
+  const full = base({
+    settings: { rows: ["a", "ka"], mode: "pick", autoSpeak: true, t: 5 },
+    stats: { か: { box: 1, seen: 1, correct: 1, t: 10 } },
+    dictionary: { かさ: { t: 15, deleted: false } },
+    bestStreak: { value: 4, t: 12 },
+  });
+  const sparse = { version: 2 };
+  for (const m of [merge(full, sparse), merge(sparse, full)]) {
+    assert.deepEqual(m.settings, full.settings);
+    assert.deepEqual(m.stats, full.stats);
+    assert.deepEqual(m.dictionary, full.dictionary);
+    assert.deepEqual(m.bestStreak, full.bestStreak);
+  }
+  assert.doesNotThrow(() => merge({}, {}));
+  assert.doesNotThrow(() => merge(base({ stats: null, dictionary: null }), base()));
+});
+
+test("the best streak never goes down, even when the lower one is newer", () => {
+  const a = base({ bestStreak: { value: 9, t: 40 } });
+  const b = base({ bestStreak: { value: 5, t: 45 } });
+  assert.equal(merge(a, b).bestStreak.value, 9);
+  assert.equal(merge(b, a).bestStreak.value, 9);
+});
+
+test("canonical skips undefined values like JSON does", () => {
+  assert.equal(canonical({ t: 1, x: undefined }), canonical({ t: 1 }));
+});
+
+// Tiny seeded PRNG so failures are reproducible.
+function mulberry32(seed) {
+  return () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let x = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function randomState(rnd) {
+  const int = n => Math.floor(rnd() * n);
+  const chance = p => rnd() < p;
+  const keys = ["か", "さ", "あ"];
+  const state = { version: 2 };
+  if (chance(0.85)) {
+    state.settings = {
+      rows: chance(0.5) ? ["a"] : ["a", "ka"],
+      mode: chance(0.5) ? "type" : "pick",
+      autoSpeak: chance(0.5),
+      t: int(6),
+    };
+  }
+  if (chance(0.85)) {
+    state.stats = {};
+    for (const k of keys) {
+      if (chance(0.6)) state.stats[k] = { box: int(4), seen: int(4), correct: int(4), t: int(6) };
+    }
+  }
+  if (chance(0.85)) {
+    state.dictionary = {};
+    for (const k of keys) {
+      if (chance(0.6)) state.dictionary[k] = { t: int(6), deleted: chance(0.5) };
+    }
+  }
+  if (chance(0.85)) state.bestStreak = { value: int(10), t: int(6) };
+  if (chance(0.85)) state.resetAt = int(6);
+  return state;
+}
+
+test("property: merge is commutative, associative and idempotent on merge outputs", () => {
+  const rnd = mulberry32(12345);
+  for (let i = 0; i < 300; i++) {
+    const a = randomState(rnd), b = randomState(rnd), c = randomState(rnd);
+    const note = `case ${i}: ${canonical([a, b, c])}`;
+    assert.equal(canonical(merge(a, b)), canonical(merge(b, a)), `commutative, ${note}`);
+    assert.equal(
+      canonical(merge(merge(a, b), c)),
+      canonical(merge(a, merge(b, c))),
+      `associative, ${note}`,
+    );
+    const m = merge(a, b);
+    assert.equal(canonical(merge(m, m)), canonical(m), `idempotent, ${note}`);
+  }
+});
+
+test("a lower but later best streak survives a reset whatever the merge order", () => {
+  const a = base({ resetAt: 4 });
+  const b = base({ bestStreak: { value: 3, t: 3 } });
+  const c = base({ bestStreak: { value: 2, t: 4 } });
+  const left = merge(merge(a, b), c);
+  const right = merge(a, merge(b, c));
+  assert.equal(left.bestStreak.value, 2);
+  assert.equal(canonical(left), canonical(right));
 });

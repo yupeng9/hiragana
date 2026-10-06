@@ -48,7 +48,11 @@ Every mergeable item carries a timestamp `t` (ms since epoch) of its last change
 ```
 
 `merge(a, b)`:
-- **settings, bestStreak:** keep the side with the larger `t`.
+- **settings:** keep the side with the larger `t`.
+- **bestStreak:** a record, so the highest `value` since the last reset wins (ties: larger
+  `t`). A lower record with a later `t` is kept in `bestStreakLater` (merge-only, optional),
+  because it survives a reset that wipes the higher, older one; this keeps `merge`
+  associative.
 - **stats:** per kana, keep the entry with the larger `t`; drop entries with `t < resetAt`.
 - **dictionary:** per word, keep the entry with the larger `t`. Removing a word sets
   `deleted: true` (a tombstone), so a removal on one device wins over an older save on the
@@ -109,7 +113,7 @@ the next launch. Requests to `api.github.com` are never cached.
 
 ## 6. Testing
 
-- `node --test test/` for the merge rules: disjoint changes, conflicting edits (newer
+- `node --test` for the merge rules: disjoint changes, conflicting edits (newer
   wins), a removal against an older save, a save after a removal, a reset on one side,
   commutativity/idempotence, and v1 → v2 migration.
 - Playwright at an iPhone viewport (390×844) and a desktop viewport: practice flow, words,
