@@ -1,10 +1,10 @@
 import { ROWS, ALL, WORDS, MAX_BOX } from "./data.js";
 import {
   loadState, saveState, statOf, isSaved, savedWords, toggleWord, recordAnswer,
-  updateBest, setSettings, resetProgress,
+  updateBest, setSettings, resetProgress, activeRows, activeMode,
 } from "./store.js";
-import { merge } from "./merge.js";
-import { GistClient, Syncer, connect, CONFIG_KEY } from "./sync.js";
+import { merge, canonical } from "./merge.js";
+import { GistClient, Syncer, connect, loadConfig, saveConfig, clearConfig } from "./sync.js";
 
 let state = loadState(localStorage);
 saveState(localStorage, state);  // persists a v1 → v2 migration straight away
@@ -12,7 +12,7 @@ saveState(localStorage, state);  // persists a v1 → v2 migration straight away
 // ---------- Helpers ----------
 const $ = id => document.getElementById(id);
 const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
-const pool = () => ALL.filter(c => state.settings.rows.includes(c.row));
+const pool = () => ALL.filter(c => activeRows(state).includes(c.row));
 
 // Save locally, then sync a few seconds later.
 function persist() {
@@ -117,7 +117,7 @@ let current = null, answered = false, currentMode = null, currentWords = [];
 
 function renderRowToggles() {
   $("rowToggles").innerHTML = ROWS.map(r => {
-    const on = state.settings.rows.includes(r.id);
+    const on = activeRows(state).includes(r.id);
     const sample = r.chars.find(Boolean)[0];
     return `<label class="${on ? "on" : ""}"><input type="checkbox" value="${r.id}" ${on ? "checked" : ""}>${sample} ${r.label}</label>`;
   }).join("");
@@ -136,7 +136,7 @@ function nextCard() {
   current = pickCard();
   lastKana = current.kana;
   answered = false;
-  const mode = state.settings.mode;
+  const mode = activeMode(state);
   currentMode = mode === "mixed" ? (Math.random() < 0.5 ? "type" : "pick") : mode;
   $("feedback").textContent = "";
   $("feedback").className = "feedback";
@@ -249,7 +249,7 @@ function gridHtml(cellFn) {
 
 function renderChart() {
   $("chartTable").innerHTML = gridHtml(c =>
-    `<td class="cell ${state.settings.rows.includes(c.row) ? "" : "off"}" data-kana="${c.kana}"><span class="k">${c.kana}</span><span class="r">${c.accepted.join(" / ")}</span></td>`);
+    `<td class="cell ${activeRows(state).includes(c.row) ? "" : "off"}" data-kana="${c.kana}"><span class="k">${c.kana}</span><span class="r">${c.accepted.join(" / ")}</span></td>`);
   $("chartTable").querySelectorAll("td[data-kana]").forEach(td =>
     td.addEventListener("click", () => {
       speak(td.dataset.kana);
@@ -280,7 +280,7 @@ function renderProgress() {
     const s = state.stats[c.kana];
     const level = !s || s.seen === 0 ? 0 : 1 + Math.min(4, s.box);
     const acc = s && s.seen ? `${Math.round(100 * s.correct / s.seen)}% · ${s.seen}×` : "—";
-    return `<td class="cell m${level} ${state.settings.rows.includes(c.row) ? "" : "off"}"><span class="k">${c.kana}</span><span class="r">${acc}</span></td>`;
+    return `<td class="cell m${level} ${activeRows(state).includes(c.row) ? "" : "off"}"><span class="k">${c.kana}</span><span class="r">${acc}</span></td>`;
   });
   const st = kana => statOf(state, kana);
   const weak = pool()
@@ -302,7 +302,6 @@ $("resetBtn").addEventListener("click", () => {
 });
 
 // ---------- Sync ----------
-const loadConfig = () => JSON.parse(localStorage.getItem(CONFIG_KEY) || "null");
 let syncer = null;
 
 const STATUS_TEXT = {
@@ -323,18 +322,20 @@ function showStatus(status) {
 // Merge what the gist had into whatever is local *now* (the user may have changed
 // something while the request was in flight), then refresh the screen.
 function applyRemote(remote) {
-  const rowsBefore = JSON.stringify(state.settings.rows);
+  const rowsBefore = JSON.stringify(activeRows(state));
+  const before = canonical(state);
   state = merge(state, remote);
+  if (canonical(state) === before) return;  // nothing new from the other device
   saveState(localStorage, state);
 
-  $("mode").value = state.settings.mode;
+  $("mode").value = activeMode(state);
   $("autoSpeak").checked = state.settings.autoSpeak;
   $("sBest").textContent = state.bestStreak.value;
   refreshStars();
-  if (rowsBefore !== JSON.stringify(state.settings.rows)) {
+  if (rowsBefore !== JSON.stringify(activeRows(state))) {
     renderRowToggles();
     renderChart();
-    if (!answered) nextCard();
+    if (!answered && current && !activeRows(state).includes(current.row)) nextCard();
   }
   const view = document.querySelector(".view.active").id;
   if (view === "words") renderWords();
@@ -356,7 +357,7 @@ function startSync(config) {
 }
 
 function renderSyncPanel() {
-  const config = loadConfig();
+  const config = loadConfig(localStorage);
   $("syncSetup").hidden = !!config;
   $("syncConnected").hidden = !config;
   if (config) $("syncLogin").textContent = config.login;
@@ -370,7 +371,7 @@ $("connectBtn").addEventListener("click", async () => {
   try {
     const { login, gistId } = await connect(new GistClient(token), state);
     const config = { token, gistId, login };
-    localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+    saveConfig(localStorage, config);
     $("tokenInput").value = "";
     renderSyncPanel();
     await startSync(config);
@@ -381,17 +382,21 @@ $("connectBtn").addEventListener("click", async () => {
   }
 });
 
-// A fresh Syncer, so "Sync now" also retries after an error.
+// Reuse the running syncer; after a 401/404 it is stopped, so start a fresh one to retry.
 $("syncNowBtn").addEventListener("click", () => {
-  const c = loadConfig();
-  if (c) startSync(c).catch(e => console.error("sync failed", e));
+  const c = loadConfig(localStorage);
+  if (!c) return;
+  (syncer && !syncer.stopped ? syncer.run() : startSync(c)).catch(e => console.error("sync failed", e));
 });
+
+// Enter in the token box connects.
+$("tokenInput").addEventListener("keydown", e => { if (e.key === "Enter") $("connectBtn").click(); });
 
 $("disconnectBtn").addEventListener("click", () => {
   if (!confirm("Stop syncing on this device? Your progress stays here and in the gist.")) return;
   syncer?.stop();
   syncer = null;
-  localStorage.removeItem(CONFIG_KEY);
+  clearConfig(localStorage);
   showStatus({ kind: "off" });
   renderSyncPanel();
 });
@@ -413,14 +418,14 @@ document.querySelectorAll("[data-view]").forEach(b => b.addEventListener("click"
 }));
 
 // ---------- Init ----------
-$("mode").value = state.settings.mode;
+$("mode").value = activeMode(state);
 $("autoSpeak").checked = state.settings.autoSpeak;
 $("sBest").textContent = state.bestStreak.value;
 renderRowToggles();
 renderChart();
 nextCard();
 renderSyncPanel();
-const config = loadConfig();
+const config = loadConfig(localStorage);
 if (config) startSync(config).catch(e => console.error("sync failed", e)); else showStatus({ kind: "off" });
 
 if ("serviceWorker" in navigator) {

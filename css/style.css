@@ -135,6 +135,7 @@ nav .ico { display: none; }
 }
 #syncBadge[data-kind="ok"] i { background: var(--good); }
 #syncBadge[data-kind="syncing"] i { background: #e0a100; }
+#syncBadge[data-kind="offline"] i { background: #8a8378; }
 #syncBadge[data-kind="error"] i { background: var(--bad); }
 #sync h2 { font-size: 20px; margin: 0 0 8px; }
 .sync-status { font-weight: 600; }

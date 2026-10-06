@@ -7,6 +7,24 @@ export const GIST_FILE = "hiragana-progress.json";
 // Per-device sync settings { token, gistId, login }; stored locally, never synced.
 export const CONFIG_KEY = "hiragana-sync";
 
+const isConfig = v => !!v && typeof v === "object" && !Array.isArray(v) &&
+  typeof v.token === "string" && typeof v.gistId === "string" &&
+  (v.login === undefined || typeof v.login === "string");
+
+// Returns the saved config, or null if there is none or it is unusable (then it is removed).
+export function loadConfig(storage) {
+  const raw = storage.getItem(CONFIG_KEY);
+  if (raw === null) return null;
+  let config;
+  try { config = JSON.parse(raw); } catch { config = undefined; }
+  if (isConfig(config)) return config;
+  storage.removeItem(CONFIG_KEY);
+  return null;
+}
+
+export const saveConfig = (storage, config) => storage.setItem(CONFIG_KEY, JSON.stringify(config));
+export const clearConfig = storage => storage.removeItem(CONFIG_KEY);
+
 // status 0 = network failure (offline); -1 = the gist's file is unusable (a remote data
 // problem, worth retrying later); otherwise the HTTP status.
 export class SyncError extends Error {

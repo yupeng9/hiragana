@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   STORE_KEY, LEGACY_KEY, emptyState, loadState, saveState, statOf, isSaved, savedWords,
-  toggleWord, recordAnswer, updateBest, setSettings, resetProgress,
+  toggleWord, recordAnswer, updateBest, setSettings, resetProgress, activeRows, activeMode,
 } from "../js/store.js";
 import { DEFAULT_ROWS, MAX_BOX } from "../js/data.js";
 import { merge, canonical } from "../js/merge.js";
@@ -221,4 +221,49 @@ test("a storage that cannot save the backup still gives an empty state", () => {
   storage.setItem = () => { throw new Error("QuotaExceededError"); };
   const s = quietly(() => loadState(storage));
   assert.equal(canonical(s), canonical(emptyState()));
+});
+
+test("activeRows falls back to the defaults for empty, non-array or all-unknown rows", () => {
+  for (const rows of [[], "a", null, undefined, { 0: "a" }, ["zz", "qq"]]) {
+    const s = emptyState();
+    s.settings.rows = rows;
+    assert.deepEqual(activeRows(s), DEFAULT_ROWS);
+  }
+});
+
+test("activeRows drops unknown ids, keeps known ones, and does not rewrite the state", () => {
+  const s = emptyState();
+  s.settings.rows = ["ka", "zz", "na"];
+  assert.deepEqual(activeRows(s), ["ka", "na"]);
+  assert.deepEqual(s.settings.rows, ["ka", "zz", "na"]);
+  s.settings.rows = [];
+  const rows = activeRows(s);
+  rows.push("x");
+  assert.deepEqual(DEFAULT_ROWS, ["a", "ka", "sa", "ta"]);
+});
+
+test("activeMode accepts the three modes and falls back to type", () => {
+  for (const mode of ["type", "pick", "mixed"]) {
+    const s = emptyState();
+    s.settings.mode = mode;
+    assert.equal(activeMode(s), mode);
+  }
+  for (const mode of ["bogus", undefined, null, 3]) {
+    const s = emptyState();
+    s.settings.mode = mode;
+    assert.equal(activeMode(s), "type");
+  }
+});
+
+test("a null or non-object dictionary entry counts as not saved and is skipped", () => {
+  const s = emptyState();
+  s.dictionary["かさ"] = null;
+  s.dictionary["いし"] = "junk";
+  s.dictionary["あめ"] = { t: 5, deleted: false };
+  assert.equal(isSaved(s, "かさ"), false);
+  assert.equal(isSaved(s, "いし"), false);
+  assert.equal(isSaved(s, "あめ"), true);
+  assert.deepEqual(savedWords(s), [{ kana: "あめ", t: 5 }]);
+  toggleWord(s, "かさ", 9);
+  assert.equal(isSaved(s, "かさ"), true);
 });

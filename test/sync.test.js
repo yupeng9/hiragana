@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GistClient, Syncer, SyncError, connect, GIST_FILE } from "../js/sync.js";
+import { GistClient, Syncer, SyncError, connect, GIST_FILE, CONFIG_KEY, loadConfig, saveConfig, clearConfig } from "../js/sync.js";
 import { emptyState } from "../js/store.js";
 
 const reply = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
@@ -311,4 +311,45 @@ test("findGist looks at page 2 when page 1 is full of other gists", async () => 
     "GET /gists?per_page=100&page=2": () => reply(200, [{ id: "g2", files: { [GIST_FILE]: {} } }]),
   });
   assert.equal(await new GistClient("tok", fetch).findGist(), "g2");
+});
+
+const memoryStorage = (data = {}) => ({
+  data,
+  getItem(k) { return k in this.data ? this.data[k] : null; },
+  setItem(k, v) { this.data[k] = String(v); },
+  removeItem(k) { delete this.data[k]; },
+});
+
+test("sync config round-trips through saveConfig and loadConfig", () => {
+  const storage = memoryStorage();
+  const config = { token: "tok", gistId: "g1", login: "yupeng9" };
+  saveConfig(storage, config);
+  assert.deepEqual(loadConfig(storage), config);
+  saveConfig(storage, { token: "tok", gistId: "g1" });
+  assert.deepEqual(loadConfig(storage), { token: "tok", gistId: "g1" });
+});
+
+test("loadConfig returns null when nothing is stored", () => {
+  assert.equal(loadConfig(memoryStorage()), null);
+});
+
+test("loadConfig returns null and removes corrupt JSON", () => {
+  const storage = memoryStorage({ [CONFIG_KEY]: "{oops" });
+  assert.equal(loadConfig(storage), null);
+  assert.equal(storage.getItem(CONFIG_KEY), null);
+});
+
+test("loadConfig returns null and removes a value of the wrong shape", () => {
+  for (const raw of ["{}", '{"token":1,"gistId":"g"}', '{"token":"t"}', '{"token":"t","gistId":"g","login":5}', "null", "[]", '"x"', "7"]) {
+    const storage = memoryStorage({ [CONFIG_KEY]: raw });
+    assert.equal(loadConfig(storage), null, raw);
+    assert.equal(storage.getItem(CONFIG_KEY), null, raw);
+  }
+});
+
+test("clearConfig removes the stored config", () => {
+  const storage = memoryStorage();
+  saveConfig(storage, { token: "t", gistId: "g", login: "l" });
+  clearConfig(storage);
+  assert.equal(storage.getItem(CONFIG_KEY), null);
 });

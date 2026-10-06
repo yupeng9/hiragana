@@ -1,6 +1,6 @@
 // Local progress state: shape, persistence, v1 migration, and every mutation.
 // Each mutation stamps the changed item with `t` so merge.js can sync it.
-import { DEFAULT_ROWS, MAX_BOX } from "./data.js";
+import { ROWS, DEFAULT_ROWS, MAX_BOX } from "./data.js";
 
 export const STORE_KEY = "hiragana-practice-v2";
 export const LEGACY_KEY = "hiragana-practice-v1";
@@ -83,12 +83,26 @@ export const saveState = (storage, state) => storage.setItem(STORE_KEY, JSON.str
 // Read-only: may return a shared frozen object.
 export const statOf = (state, kana) => state.stats[kana] || UNSEEN;
 
-export const isSaved = (state, kana) => !!state.dictionary[kana] && !state.dictionary[kana].deleted;
+// A dictionary entry from a hand-edited or damaged file may not be an object: treat it as not saved.
+const liveEntry = entry => isObject(entry) && !entry.deleted;
+
+export const isSaved = (state, kana) => liveEntry(state.dictionary[kana]);
 
 export const savedWords = state => Object.entries(state.dictionary)
-  .filter(([, entry]) => !entry.deleted)
+  .filter(([, entry]) => liveEntry(entry))
   .sort((a, b) => b[1].t - a[1].t)
   .map(([kana, entry]) => ({ kana, t: entry.t }));
+
+// Settings come from storage or another device, so the UI reads them through these two
+// instead of trusting them. They never rewrite the state.
+const ROW_IDS = new Set(ROWS.map(r => r.id));
+export function activeRows(state) {
+  const rows = Array.isArray(state.settings.rows) ? state.settings.rows.filter(id => ROW_IDS.has(id)) : [];
+  return rows.length ? rows : [...DEFAULT_ROWS];
+}
+
+const MODES = ["type", "pick", "mixed"];
+export const activeMode = state => MODES.includes(state.settings.mode) ? state.settings.mode : "type";
 
 // Removing a word leaves a tombstone so the removal syncs to the other device.
 export function toggleWord(state, kana, now) {
