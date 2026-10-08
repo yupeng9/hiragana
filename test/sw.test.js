@@ -23,7 +23,8 @@ test("every app file is precached", () => {
   const listed = new Set(precacheFiles(sw));
   const expected = [
     "index.html", "manifest.webmanifest",
-    ...["js", "css"].flatMap(d => readdirSync(join(root, d)).map(f => `${d}/${f}`)),
+    ...["js", "js/decks", "css"].flatMap(d =>
+      readdirSync(join(root, d), { withFileTypes: true }).filter(e => e.isFile()).map(e => `${d}/${e.name}`)),
     ...readdirSync(join(root, "icons")).filter(f => f.endsWith(".png")).map(f => `icons/${f}`),
   ];
   for (const f of expected) assert.ok(listed.has(f), `${f} is missing from the FILES list in sw.js`);
