@@ -11,7 +11,7 @@ const MIGRATED_T = 1;
 const UNSEEN = Object.freeze({ box: 0, seen: 0, correct: 0, t: 0 });
 
 // Everything starts at t = 0, so a brand-new device never overrides synced progress.
-// merge.js may add an optional `bestStreakLater` array and `statsLater`/`srsLater` maps (see merge.js); it is not set here.
+// merge.js may add an optional `bestStreakLater` array and `statsLater` map (see merge.js); it is not set here.
 export function emptyState() {
   return {
     version: 2,
@@ -142,8 +142,8 @@ export function resetProgress(state, now) {
 export const SRS_DECKS = ["vocab", "kanji", "grammar", "custom"];
 const limit = (v, fallback) => (Number.isFinite(v) ? Math.min(999, Math.max(0, Math.trunc(v))) : fallback);
 
-export function srsSettings(state) {
-  const srs = isObject(state.settings?.srs) ? state.settings.srs : {};
+function sanitiseSrs(value) {
+  const srs = isObject(value) ? value : {};
   return {
     newPerDay: limit(srs.newPerDay, 10),
     reviewsPerDay: limit(srs.reviewsPerDay, 100),
@@ -152,8 +152,11 @@ export function srsSettings(state) {
   };
 }
 
+export const srsSettings = state => sanitiseSrs(state.settings?.srs);
+
+// Stores only the sanitised value, so junk in the patch is never persisted or synced.
 export function setSrsSettings(state, patch, now) {
-  setSettings(state, { srs: { ...srsSettings(state), ...patch } }, now);
+  setSettings(state, { srs: sanitiseSrs({ ...srsSettings(state), ...patch }) }, now);
 }
 
 // Read-only. A missing or damaged map reads as empty.
@@ -170,16 +173,18 @@ function customCardsOf(state) {
   return state.customCards;
 }
 
+// A card without a non-empty string id is ignored.
 export function saveCustomCard(state, card, now) {
+  if (typeof card?.id !== "string" || !card.id) return;
   customCardsOf(state)[card.id] = { ...card, t: now, deleted: false };
 }
 
-// Deleting leaves a tombstone so the deletion syncs to the other device.
+// Deleting leaves a minimal tombstone so the deletion syncs to the other device.
 export function deleteCustomCard(state, id, now) {
-  const cards = customCardsOf(state);
-  const existing = isObject(cards[id]) ? cards[id] : { id };
-  cards[id] = { ...existing, t: now, deleted: true };
+  customCardsOf(state)[id] = { id, t: now, deleted: true };
 }
 
-export const liveCustomCards = state => Object.values(state.customCards ?? {})
-  .filter(c => c && typeof c === "object" && !c.deleted);
+// The map key is the card's id, whatever the entry itself says.
+export const liveCustomCards = state => Object.entries(isObject(state.customCards) ? state.customCards : {})
+  .filter(([, c]) => isObject(c) && !c.deleted)
+  .map(([id, c]) => ({ ...c, id }));

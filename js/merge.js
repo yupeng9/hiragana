@@ -28,13 +28,19 @@ function newer(a, b) {
   return canonical(a) >= canonical(b) ? a : b;
 }
 
+// Entries and maps from a damaged or hand-edited file may be anything: a non-object
+// (or an array) counts as absent, and a non-object map as {}.
+const isRecord = v => !!v && typeof v === "object" && !Array.isArray(v);
+const mapOf = v => (isRecord(v) ? v : {});
+const entryOf = v => (isRecord(v) ? v : undefined);
+
 function mergeMap(a, b, keep = () => true) {
-  a = a ?? {};
-  b = b ?? {};
+  a = mapOf(a);
+  b = mapOf(b);
   const out = {};
   for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
-    const entry = newer(a[key], b[key]);
-    if (keep(entry)) out[key] = entry;
+    const entry = newer(entryOf(a[key]), entryOf(b[key]));
+    if (entry && keep(entry)) out[key] = entry;
   }
   return out;
 }
@@ -57,16 +63,17 @@ function unbeaten(sorted) {
 }
 
 const recordsOf = (entry, later) => [entry, ...(Array.isArray(later) ? later : [])]
-  .filter(e => e && typeof e === "object");
+  .filter(isRecord);
 
 // Per-key "more work wins" maps (stats by `seen`, srs by `reps`): after dropping entries
 // older than minT, the entry with the larger count wins; ties go to the newer t, then to
-// the canonical JSON. An entry with a smaller count but a later t can outlive a reset that
-// wipes the bigger, older one, so such entries are kept in the merge-only `<field>Later`
-// map to keep merge associative. Missing or malformed maps count as empty.
-function mergeCounted(a, b, field, countField, minT) {
+// the canonical JSON. For stats, an entry with fewer answers but a later t can outlive a
+// reset that wipes the bigger, older one, so with keepLater such entries are kept in the
+// merge-only `<field>Later` map to keep merge associative. Without a reset (srs), taking
+// the maximum is already associative, so no `<field>Later` is read or written.
+function mergeCounted(a, b, field, { count, minT, keepLater }) {
   const laterField = `${field}Later`;
-  const sides = [a, b].map(s => ({ map: s[field] ?? {}, later: s[laterField] ?? {} }));
+  const sides = [a, b].map(s => ({ map: mapOf(s[field]), later: keepLater ? mapOf(s[laterField]) : {} }));
   const keys = new Set(sides.flatMap(s => [...Object.keys(s.map), ...Object.keys(s.later)]));
   const map = {};
   const later = {};
@@ -75,8 +82,8 @@ function mergeCounted(a, b, field, countField, minT) {
       .flatMap(s => recordsOf(s.map[key], s.later[key]))
       .filter(e => timeOf(e) >= minT);
     candidates.sort((x, y) =>
-      countOf(y, countField) - countOf(x, countField) || timeOf(y) - timeOf(x) || compareCanonical(x, y));
-    const [top, ...rest] = unbeaten(candidates);
+      countOf(y, count) - countOf(x, count) || timeOf(y) - timeOf(x) || compareCanonical(x, y));
+    const [top, ...rest] = keepLater ? unbeaten(candidates) : candidates.slice(0, 1);
     if (top) map[key] = top;
     if (rest.length) later[key] = rest;
   }
@@ -111,10 +118,10 @@ export function merge(a, b) {
   return {
     version: 2,
     settings: newer(a.settings, b.settings) ?? null,
-    ...mergeCounted(a, b, "stats", "seen", resetAt),
+    ...mergeCounted(a, b, "stats", { count: "seen", minT: resetAt, keepLater: true }),
     dictionary: mergeMap(a.dictionary, b.dictionary),
     // SRS progress is not cleared by a reset, so there is no reset filter.
-    ...mergeCounted(a, b, "srs", "reps", 0),
+    ...mergeCounted(a, b, "srs", { count: "reps", minT: 0, keepLater: false }),
     customCards: mergeMap(a.customCards, b.customCards),
     bestStreak,
     ...(later.length ? { bestStreakLater: later } : {}),

@@ -153,9 +153,14 @@ function mulberry32(seed) {
   };
 }
 
+const JUNK = [null, 0, false, "x", [], [{ t: 1 }]];
+
 function randomState(rnd) {
   const int = n => Math.floor(rnd() * n);
   const chance = p => rnd() < p;
+  const junk = () => JUNK[int(JUNK.length)];
+  // Sometimes swap an entry, or a whole map, for a malformed value.
+  const maybeJunk = value => (chance(0.1) ? junk() : value);
   const keys = ["か", "さ", "あ"];
   const state = { version: 2 };
   if (chance(0.85)) {
@@ -175,8 +180,9 @@ function randomState(rnd) {
   if (chance(0.85)) {
     state.dictionary = {};
     for (const k of keys) {
-      if (chance(0.6)) state.dictionary[k] = { t: int(6), deleted: chance(0.5) };
+      if (chance(0.6)) state.dictionary[k] = maybeJunk({ t: int(6), deleted: chance(0.5) });
     }
+    state.dictionary = maybeJunk(state.dictionary);
   }
   if (chance(0.85)) state.bestStreak = { value: int(10), t: int(6) };
   if (chance(0.85)) state.resetAt = int(6);
@@ -184,14 +190,16 @@ function randomState(rnd) {
   if (chance(0.85)) {
     state.srs = {};
     for (const k of cards) {
-      if (chance(0.6)) state.srs[k] = { reps: int(4), interval: int(3), t: int(6) };
+      if (chance(0.6)) state.srs[k] = maybeJunk({ reps: int(4), interval: int(3), t: int(6) });
     }
+    state.srs = maybeJunk(state.srs);
   }
   if (chance(0.85)) {
     state.customCards = {};
     for (const id of ["c1", "c2", "c3"]) {
-      if (chance(0.6)) state.customCards[id] = { id, front: chance(0.5) ? "猫" : "犬", back: "x", t: int(6), deleted: chance(0.5) };
+      if (chance(0.6)) state.customCards[id] = maybeJunk({ id, front: chance(0.5) ? "猫" : "犬", back: "x", t: int(6), deleted: chance(0.5) });
     }
+    state.customCards = maybeJunk(state.customCards);
   }
   return state;
 }
@@ -275,7 +283,7 @@ test("the srs entry with more reps wins over a newer one", () => {
   for (const [x, y] of [[long, fresh], [fresh, long]]) {
     const m = merge(base({ srs: { "vocab:ねこ": x } }), base({ srs: { "vocab:ねこ": y } }));
     assert.deepEqual(m.srs["vocab:ねこ"], long);
-    assert.deepEqual(m.srsLater, { "vocab:ねこ": [fresh] });
+    assert.equal(m.srsLater, undefined);
   }
 });
 
@@ -310,6 +318,35 @@ test("custom cards survive a reset", () => {
   const card = { id: "c1", front: "猫", back: "cat", t: 10, deleted: false };
   const m = merge(base({ resetAt: 50 }), base({ customCards: { c1: card } }));
   assert.deepEqual(m.customCards, { c1: card });
+});
+
+test("an incoming srsLater is ignored and never written", () => {
+  const m = merge(
+    base({ srs: { "vocab:ねこ": { reps: 1, t: 3 } }, srsLater: { "vocab:ねこ": [{ reps: 9, t: 9 }], "kanji:日": [{ reps: 2, t: 2 }] } }),
+    base({ srs: { "vocab:ねこ": { reps: 2, t: 1 } } }),
+  );
+  assert.deepEqual(m.srs, { "vocab:ねこ": { reps: 2, t: 1 } });
+  assert.equal("srsLater" in m, false);
+});
+
+test("non-object entries and maps count as absent in dictionary, customCards and srs", () => {
+  const good = { t: 5, deleted: false };
+  for (const bad of [null, 0, false, "x", [], [good]]) {
+    const a = base({ dictionary: { かさ: bad, あい: good }, customCards: { c1: bad }, srs: { "kanji:日": bad } });
+    for (const m of [merge(a, base()), merge(base(), a)]) {
+      assert.deepEqual(m.dictionary, { あい: good });
+      assert.deepEqual(m.customCards, {});
+      assert.deepEqual(m.srs, {});
+    }
+    const whole = base({ dictionary: bad, customCards: bad, srs: bad, stats: bad });
+    const other = base({ dictionary: { あい: good } });
+    for (const m of [merge(whole, other), merge(other, whole)]) {
+      assert.deepEqual(m.dictionary, { あい: good });
+      assert.deepEqual(m.customCards, {});
+      assert.deepEqual(m.srs, {});
+      assert.deepEqual(m.stats, {});
+    }
+  }
 });
 
 test("missing or malformed srs, srsLater and customCards do not throw", () => {

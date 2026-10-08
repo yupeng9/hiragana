@@ -348,6 +348,14 @@ test("setSrsSettings patches the sanitised SRS settings with a new timestamp", (
   assert.equal(s.settings.mode, "type");
 });
 
+test("setSrsSettings never persists junk", () => {
+  const s = emptyState();
+  setSrsSettings(s, { newPerDay: -3, reviewsPerDay: "lots", showRomaji: "no", decks: "zz", bogus: 1 }, 10);
+  assert.deepEqual(s.settings.srs, { newPerDay: 0, reviewsPerDay: 100, showRomaji: true, decks: ALL_DECKS });
+  setSrsSettings(s, { decks: ["zz", "kanji"] }, 11);
+  assert.deepEqual(s.settings.srs.decks, ["kanji"]);
+});
+
 test("recordReview stores the next card state and srsOf reads it", () => {
   const s = emptyState();
   const next = { reps: 1, interval: 1, ease: 2.5, due: 5, lapses: 0, t: 9 };
@@ -362,26 +370,31 @@ test("saveCustomCard and deleteCustomCard stamp the card, leaving a tombstone", 
   saveCustomCard(s, { id: "c2", front: "犬", back: "dog" }, 11);
   assert.deepEqual(s.customCards.c1, { id: "c1", front: "猫", back: "cat", t: 10, deleted: false });
   deleteCustomCard(s, "c1", 20);
-  assert.deepEqual(s.customCards.c1, { id: "c1", front: "猫", back: "cat", t: 20, deleted: true });
+  assert.deepEqual(s.customCards.c1, { id: "c1", t: 20, deleted: true });
   assert.deepEqual(liveCustomCards(s).map(c => c.id), ["c2"]);
   saveCustomCard(s, { id: "c1", front: "猫", back: "cat!" }, 30);
   assert.equal(s.customCards.c1.deleted, false);
 });
 
-test("liveCustomCards skips malformed entries and a missing map", () => {
+test("liveCustomCards skips malformed entries and maps, and takes the id from the key", () => {
   const s = emptyState();
-  s.customCards = { a: null, b: "junk", c: { id: "c", t: 1, deleted: false } };
-  assert.deepEqual(liveCustomCards(s).map(c => c.id), ["c"]);
+  s.customCards = { a: null, b: "junk", d: [1], c: { id: "wrong", t: 1, deleted: false }, e: { t: 2 } };
+  assert.deepEqual(liveCustomCards(s).map(c => c.id), ["c", "e"]);
   assert.deepEqual(liveCustomCards({}), []);
+  for (const bad of [null, "xy", [{ id: "a" }]]) assert.deepEqual(liveCustomCards({ customCards: bad }), []);
+});
+
+test("saveCustomCard ignores cards without a non-empty string id", () => {
+  const s = emptyState();
+  for (const card of [{}, { id: "" }, { id: 3 }, { id: null }, null, undefined]) saveCustomCard(s, card, 10);
+  assert.deepEqual(s.customCards, {});
 });
 
 test("resetProgress leaves srs and custom cards alone", () => {
   const s = emptyState();
   recordReview(s, "kanji:日", { reps: 3, t: 10 });
-  s.srsLater = { "kanji:日": [{ reps: 1, t: 12 }] };
   saveCustomCard(s, { id: "c1", front: "a", back: "b" }, 10);
   resetProgress(s, 50);
   assert.deepEqual(s.srs, { "kanji:日": { reps: 3, t: 10 } });
-  assert.deepEqual(s.srsLater, { "kanji:日": [{ reps: 1, t: 12 }] });
   assert.equal(liveCustomCards(s).length, 1);
 });

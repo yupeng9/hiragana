@@ -49,7 +49,7 @@ Every mergeable item carries a timestamp `t` (ms since epoch) of its last change
   bestStreak: { value, t },
   resetAt: number,           // time of the last "Reset progress", 0 if never
   srs:         { [cardId]: { reps, ..., t } },       // scheduler state per card (js/srs.js)
-  customCards: { [id]: { id, ..., t, deleted: boolean } }
+  customCards: { [id]: { id, ..., t, deleted: false } | { id, t, deleted: true } }
 }
 ```
 
@@ -68,14 +68,19 @@ Every mergeable item carries a timestamp `t` (ms since epoch) of its last change
   `deleted: true` (a tombstone), so a removal on one device wins over an older save on the
   other. Tombstones are kept (they are tiny).
 - **srs:** per card, keep the entry with more reviews (`reps`); ties go to the larger `t`,
-  then the JSON string. There is no reset filter. Other entries that no winner beats on `t`
-  are kept in `srsLater` (merge-only, optional), exactly like `statsLater`; stats and srs
-  share one merge helper parameterised by the count field and the minimum `t`.
+  then the JSON string. There is no reset filter, so this maximum is already associative
+  and nothing like `statsLater` is needed: no `srsLater` is read or written. Stats and srs
+  share one merge helper, parameterised by the count field, the minimum `t` and whether to
+  keep the later entries.
 - **customCards:** per id, keep the entry with the larger `t`, like the dictionary. Deleting
-  a card sets `deleted: true`; tombstones are kept.
-- Missing or malformed `srs`, `srsLater` and `customCards` count as empty. A v2 state saved
-  before these fields existed loads with `srs: {}` and `customCards: {}`. `settings.srs` is
-  optional and read through `srsSettings`, which fills defaults and drops bad values.
+  a card replaces it with a minimal tombstone `{ id, t, deleted: true }`; tombstones are
+  kept. Readers take a card's id from its map key.
+- **Malformed data:** in `dictionary`, `customCards`, `stats` and `srs`, an entry that is
+  not an object (or is an array) counts as absent, and a whole map that is not an object
+  (or is an array) counts as `{}`. A v2 state saved before `srs`/`customCards` existed
+  loads with both as `{}`. `settings.srs` is optional; it is read through `srsSettings`,
+  which fills defaults and drops bad values, and `setSrsSettings` stores only that
+  sanitised value.
 - **resetAt:** the larger value wins. A reset clears stats and best streak, but leaves the
   dictionary, `srs` and `customCards` alone.
 - **bestStreak** with `t < resetAt` is treated as `{ value: 0 }`.
