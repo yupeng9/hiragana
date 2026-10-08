@@ -168,3 +168,17 @@ test("nextCardId: learning due now, then reviews, then new, then learn-ahead; re
   assert.deepEqual(nextCardId({ learning: [], review: [], fresh: ["n"] }, {}, T0), { id: "n", waitUntil: null });
   assert.deepEqual(nextCardId({ learning: [], review: [], fresh: [] }, {}, T0), { id: null, waitUntil: null });
 });
+
+test("nextCardId: waitUntil is the earliest finite due among learning cards, else null (never undefined)", () => {
+  const q = { learning: ["a", "b", "c"], review: [], fresh: [] };
+  const states = {
+    a: { phase: "learning" },                          // no due
+    b: { phase: "learning", due: T0 + 40 * MINUTE },
+    c: { phase: "learning", due: T0 + 30 * MINUTE },
+  };
+  assert.deepEqual(nextCardId(q, states, T0), { id: null, waitUntil: T0 + 30 * MINUTE });
+  const none = nextCardId(q, { a: { phase: "learning" } }, T0);
+  assert.deepEqual(none, { id: null, waitUntil: null });
+  assert.equal(none.waitUntil, null);
+  assert.equal(nextCardId({ learning: ["x"], review: [], fresh: [] }, {}, T0).waitUntil, null);   // missing state
+});

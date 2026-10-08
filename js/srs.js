@@ -116,6 +116,7 @@ export function nextCardId(queue, states, now) {
   const ready = (id, t) => Number.isFinite(states[id]?.due) && states[id].due <= t;
   const id = queue.learning.find(i => ready(i, now)) ?? queue.review[0] ?? queue.fresh[0]
     ?? queue.learning.find(i => ready(i, now + LEARN_AHEAD)) ?? null;
-  const waitUntil = id === null && queue.learning.length ? states[queue.learning[0]].due : null;
+  const dues = queue.learning.map(i => states[i]?.due).filter(Number.isFinite);
+  const waitUntil = id === null && dues.length ? Math.min(...dues) : null;
   return { id, waitUntil };
 }

@@ -25,8 +25,10 @@ function combine(first, small) {
     const v = BASE[small].slice(1);                            // ゃ→a
     return ["sh", "ch", "j"].includes(stem) ? stem + v : stem + "y" + v;
   }
-  const stem = base === "u" ? "w" : base.replace(/[aiueo]$/, "");   // ファ→f+a, ウィ→w+i, ティ→t+i
-  return stem + BASE[small];
+  const v = BASE[small];
+  if (base.endsWith(v)) return base + v;                            // ねぇ→nee, あぁ→aa, うぅ→uu
+  const stem = base === "u" ? "w" : base === "i" ? "y" : base.replace(/[aiueo]$/, "");   // ファ→f+a, ウィ→w+i, イェ→y+e
+  return stem + v;
 }
 
 // The kana syllable starting at chars[i]: one kana, plus a following small ゃゅょ/ぁぃぅぇぉ.
@@ -39,10 +41,10 @@ function syllableAt(chars, i) {
 // [{ text, romaji }] — romaji is null for anything that isn't kana. っ joins the syllable
 // after it (doubling its consonant), and ー joins the syllable before it (repeating its vowel).
 export function syllables(text) {
-  const chars = [...text], out = [];
+  const chars = [...text.normalize("NFC")], out = [];
   for (let i = 0; i < chars.length;) {
     const ch = chars[i];
-    if (ch === "ー" && out.at(-1)?.romaji) {
+    if (ch === "ー" && out.at(-1)?.romaji && out.at(-1).romaji !== "'") {
       const prev = out.at(-1);
       prev.text += ch;
       prev.romaji += prev.romaji.match(/[aiueo]$/)?.[0] ?? "";
@@ -57,7 +59,9 @@ export function syllables(text) {
       i += 1 + s.len;
     } else {
       const s = syllableAt(chars, i);
-      out.push({ text: chars.slice(i, i + s.len).join(""), romaji: s.romaji });
+      // An unpaired っ (end of text, or before a non-kana or another っ) is a glottal stop.
+      // ん is always plain "n": ruby is per syllable, so きんえん → ki·n·e·n needs no apostrophe.
+      out.push({ text: chars.slice(i, i + s.len).join(""), romaji: s.romaji || "'" });
       i += s.len;
     }
   }
