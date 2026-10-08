@@ -30,7 +30,8 @@ New cards are introduced in deck-file order (most common first), only from enabl
 
 ## 2. Scheduling (SM-2, Anki-style)
 
-- New cards: learning steps 1 min, 10 min. Again → step 1; Hard → repeat the step;
+- New cards: learning steps 1 min, 10 min. Again → step 1; Hard → repeat the step (on the first step the delay is the average of the
+  two steps, 5.5 min; a lone relearning step is stretched 1.5×, to 15 min);
   Good → next step, then graduate to 1 day; Easy → graduate to 4 days.
 - Review cards (ease starts at 2.5, minimum 1.3):
   - Again → relearning (10 min step), lapses +1, ease −0.2, interval resets to 1 day.
@@ -38,10 +39,12 @@ New cards are introduced in deck-file order (most common first), only from enabl
     ease +0.15. Each is at least one day longer than the previous button's; maximum 100 years.
 - Relearning: Good → back to review at the reset interval; Easy → that interval + 1 day.
 - The day starts at 04:00 local time (as in Anki). Review cards are due "today" if due before
-  the next 04:00. Learning cards are shown when due within the next 20 minutes.
+  the next 04:00. Learning cards that are due now come first; learning cards due within the next 20 minutes
+  are shown early (learn ahead) only when nothing else is due.
 - Daily limits count cards first seen today (new) and cards first seen earlier but rated today
   (reviews).
-- Queue order: due learning cards, then due reviews (oldest first), then new cards.
+- Queue order: learning cards due now, then due reviews (oldest first), then new cards, then
+  learning cards due within 20 minutes.
 - Every button shows its next interval ("10m", "3d", "2.1mo").
 
 ## 3. State and sync

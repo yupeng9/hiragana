@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   AGAIN, HARD, GOOD, EASY, DAY, MINUTE, START_EASE,
-  schedule, preview, formatDelay, dayStart, buildQueue, nextCardId,
+  schedule, preview, formatDelay, dayStart, nextDayStart, buildQueue, nextCardId,
 } from "../js/srs.js";
 
 const T0 = new Date(2026, 9, 7, 10, 0).getTime();   // local 10:00
@@ -16,8 +16,10 @@ test("a new card: Good walks the learning steps, then graduates to 1 day", () =>
   assert.equal(c.reps, 2); assert.equal(c.first, T0); assert.equal(c.last, T0 + 10 * MINUTE);
 });
 
-test("a new card: Again and Hard keep it on the first step, Easy graduates to 4 days", () => {
-  assert.deepEqual([schedule(null, AGAIN, T0).due, schedule(null, HARD, T0).due], [T0 + MINUTE, T0 + MINUTE]);
+test("a new card: Again keeps it on the first step, Hard waits the average of both steps, Easy graduates to 4 days", () => {
+  assert.equal(schedule(null, AGAIN, T0).due, T0 + MINUTE);
+  const h = schedule(null, HARD, T0);
+  assert.equal(h.step, 0); assert.equal(h.phase, "learning"); assert.equal(h.due, T0 + 5.5 * MINUTE);
   const e = schedule(null, EASY, T0);
   assert.equal(e.phase, "review"); assert.equal(e.interval, 4); assert.equal(e.ease, START_EASE);
 });
@@ -42,21 +44,53 @@ test("a lapse relearns for 10 minutes, lowers ease, and returns at 1 day", () =>
   assert.equal(schedule(l, EASY, T0 + 10 * MINUTE).interval, 2);
 });
 
+test("Hard in learning: later steps repeat their delay, a lone relearning step is stretched 1.5x", () => {
+  const second = schedule(schedule(null, GOOD, T0), HARD, T0 + 10 * MINUTE);
+  assert.equal(second.step, 1); assert.equal(second.due, T0 + 20 * MINUTE);
+  const card = { phase: "review", step: 0, interval: 30, ease: 2.5, reps: 9, lapses: 2, first: 0, last: 0, due: T0 };
+  const l = schedule(card, AGAIN, T0);
+  const h = schedule(l, HARD, T0 + 10 * MINUTE);
+  assert.equal(h.phase, "relearning"); assert.equal(h.step, 0);
+  assert.equal(h.due, T0 + 25 * MINUTE); assert.equal(h.lapses, 3); assert.equal(h.interval, 1);
+});
+
+test("saved states with missing fields still schedule to finite values", () => {
+  const r = schedule({ phase: "review", reps: 3 }, GOOD, T0);
+  assert.ok(Number.isFinite(r.interval) && Number.isFinite(r.ease) && Number.isFinite(r.due), JSON.stringify(r));
+  const lost = schedule({ phase: "relearning", reps: 3 }, GOOD, T0);
+  assert.ok(Number.isFinite(lost.interval) && Number.isFinite(lost.due), JSON.stringify(lost));
+  const l = schedule({ phase: "learning", reps: 1 }, GOOD, T0);   // step missing
+  assert.equal(l.phase, "learning"); assert.equal(l.step, 1); assert.equal(l.due, T0 + 10 * MINUTE);
+  assert.equal(schedule({ phase: "learning", step: 9 }, GOOD, T0).phase, "review");   // out-of-range step = last step
+});
+
 test("intervals are capped at 100 years", () => {
   const card = { phase: "review", step: 0, interval: 36000, ease: 3, reps: 50, lapses: 0, first: 0, last: 0, due: T0 };
   assert.equal(schedule(card, EASY, T0).interval, 36500);
 });
 
 test("preview returns the delay of each button and formatDelay is short", () => {
-  assert.deepEqual(preview(null, T0), [MINUTE, MINUTE, 10 * MINUTE, 4 * DAY]);
+  assert.deepEqual(preview(null, T0), [MINUTE, 5.5 * MINUTE, 10 * MINUTE, 4 * DAY]);
   assert.deepEqual([MINUTE, 10 * MINUTE, 3 * 3600_000, DAY, 3 * DAY, 45 * DAY, 400 * DAY].map(formatDelay),
     ["1m", "10m", "3h", "1d", "3d", "1.5mo", "1.1y"]);
+});
+
+test("formatDelay promotes to the next unit when rounding reaches it", () => {
+  assert.deepEqual([59.4 * MINUTE, 59.5 * MINUTE, 23.4 * 3600_000, 23.5 * 3600_000, 29.4 * DAY, 29.6 * DAY, 364 * DAY, 36500 * DAY].map(formatDelay),
+    ["59m", "1h", "23h", "1d", "29d", "1mo", "1y", "100y"]);
 });
 
 test("the day starts at 04:00 local time", () => {
   const four = new Date(2026, 9, 7, 4, 0).getTime();
   assert.equal(dayStart(new Date(2026, 9, 7, 10, 0).getTime()), four);
   assert.equal(dayStart(new Date(2026, 9, 8, 3, 59).getTime()), four);
+});
+
+test("nextDayStart is the next 04:00 local time, also across DST changes", () => {
+  for (const [y, m, d] of [[2026, 9, 7], [2026, 2, 8], [2026, 10, 1], [2026, 2, 28]]) {
+    assert.equal(nextDayStart(new Date(y, m, d, 10, 0).getTime()), new Date(y, m, d + 1, 4, 0).getTime());
+    assert.equal(nextDayStart(new Date(y, m, d + 1, 3, 59).getTime()), new Date(y, m, d + 1, 4, 0).getTime());
+  }
 });
 
 test("buildQueue orders learning, then due reviews, then new cards within the limits", () => {
@@ -74,7 +108,7 @@ test("buildQueue orders learning, then due reviews, then new cards within the li
 });
 
 test("daily limits subtract what was already done today", () => {
-  const cards = ["n1", "n2", "n3", "r1", "r2"].map(id => ({ id }));
+  const cards = ["old", "seen", "n1", "n2", "n3", "r1", "r2"].map(id => ({ id }));
   const start = dayStart(T0);
   const states = {
     old: { phase: "review", due: T0 + 9 * DAY, first: start - 9 * DAY, last: start + 60_000 },  // reviewed today
@@ -87,6 +121,29 @@ test("daily limits subtract what was already done today", () => {
   assert.deepEqual(q.review, ["r2"]);
 });
 
+test("buildQueue ignores empty states and cards that no longer exist", () => {
+  const start = dayStart(T0);
+  const cards = ["n1", "n2", "nostate", "late"].map(id => ({ id }));
+  const states = {
+    gone: { phase: "learning", due: T0, first: start + 60_000, last: start + 60_000 },   // deleted card: uses no slot
+    nostate: null,
+    late: { phase: "review", first: 0, last: 0 },                                       // no due: counts as due
+  };
+  const q = buildQueue(cards, states, T0, { newPerDay: 1, reviewsPerDay: 5 });
+  assert.deepEqual(q.fresh, ["n1"]);
+  assert.deepEqual(q.review, ["late"]);
+  assert.deepEqual(q.learning, []);
+});
+
+test("the review window ends at the next 04:00", () => {
+  const cards = [{ id: "in" }, { id: "out" }];
+  const states = {
+    in: { phase: "review", due: nextDayStart(T0) - 1, first: 0, last: 0 },
+    out: { phase: "review", due: nextDayStart(T0), first: 0, last: 0 },
+  };
+  assert.deepEqual(buildQueue(cards, states, T0, { newPerDay: 0, reviewsPerDay: 9 }).review, ["in"]);
+});
+
 test("a card with `after` becomes new only once its sibling has graduated", () => {
   const cards = [{ id: "w:r" }, { id: "w:p", after: "w:r" }];
   assert.deepEqual(buildQueue(cards, {}, T0, { newPerDay: 9, reviewsPerDay: 9 }).fresh, ["w:r"]);
@@ -96,11 +153,17 @@ test("a card with `after` becomes new only once its sibling has graduated", () =
   assert.deepEqual(buildQueue(cards, graduated, T0, { newPerDay: 9, reviewsPerDay: 9 }).fresh, ["w:p"]);
 });
 
-test("nextCardId prefers due learning cards, then reviews, then new; reports the wait otherwise", () => {
+test("nextCardId: learning due now, then reviews, then new, then learn-ahead; reports the wait otherwise", () => {
   const states = { l: { phase: "learning", due: T0 + 30 * MINUTE } };
   const q = { learning: ["l"], review: [], fresh: [] };
   assert.deepEqual(nextCardId(q, states, T0), { id: null, waitUntil: T0 + 30 * MINUTE });
   assert.deepEqual(nextCardId(q, states, T0 + 15 * MINUTE), { id: "l", waitUntil: null });   // within 20 min learn-ahead
+  const soon = { l: { phase: "learning", due: T0 + 5 * MINUTE } };
+  const one = { learning: ["l"], review: ["r"], fresh: ["n"] };
+  assert.deepEqual(nextCardId(one, soon, T0), { id: "r", waitUntil: null });     // learn-ahead waits for reviews
+  assert.deepEqual(nextCardId({ ...one, review: [] }, soon, T0), { id: "n", waitUntil: null });   // and for new cards
+  assert.deepEqual(nextCardId({ ...one, review: [], fresh: [] }, soon, T0), { id: "l", waitUntil: null });
+  assert.deepEqual(nextCardId(one, soon, T0 + 5 * MINUTE), { id: "l", waitUntil: null });   // due now beats reviews
   assert.deepEqual(nextCardId({ learning: [], review: ["r"], fresh: ["n"] }, {}, T0), { id: "r", waitUntil: null });
   assert.deepEqual(nextCardId({ learning: [], review: [], fresh: ["n"] }, {}, T0), { id: "n", waitUntil: null });
   assert.deepEqual(nextCardId({ learning: [], review: [], fresh: [] }, {}, T0), { id: null, waitUntil: null });
