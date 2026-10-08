@@ -100,6 +100,9 @@ export function initReview({ getState, update, knownKana, speak }) {
   function show(id) {
     panel = id;
     PANELS.forEach(p => { $(p).hidden = p !== id; });
+    // Focus left on a button in a now-hidden panel would swallow Space / Enter.
+    const focused = document.activeElement;
+    if (focused && PANELS.some(p => p !== id && $(p).contains(focused))) focused.blur();
     if (id !== "revStudy") stopWaiting();
   }
   const reviewVisible = () => $("review").classList.contains("active");
@@ -205,13 +208,14 @@ export function initReview({ getState, update, knownKana, speak }) {
           `<button class="rate ${cls}" data-rate="${r}"><b>${label}</b><small>${formatDelay(delays[i])}</small></button>`).join("")}</div>`;
     }
     $("revCard").innerHTML = html;
+    // Space / Enter on "Show answer" reveals; afterwards focus sits on the card, so 1–4 rate.
+    if (reviewVisible()) (revealed ? $("revCard") : $("revCard").querySelector("[data-reveal]"))?.focus({ preventScroll: revealed });
   }
 
   function reveal() {
     if (!currentId || revealed) return;
     revealed = true;
     renderCard();
-    document.activeElement?.blur?.();
   }
 
   function rate(rating) {

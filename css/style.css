@@ -188,6 +188,7 @@ ruby rt { font-size: .45em; color: var(--muted); }
 
 .rev-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .rev-card { font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", sans-serif; }
+.rev-card:focus { outline: none; }
 .rev-face, .rev-back { text-align: center; }
 .rev-front { line-height: 1.5; margin: 8px 0; word-break: break-word; }
 .rev-front.big { font-size: 48px; }
