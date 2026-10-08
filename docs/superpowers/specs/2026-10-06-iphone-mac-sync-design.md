@@ -43,11 +43,13 @@ Every mergeable item carries a timestamp `t` (ms since epoch) of its last change
 ```
 {
   version: 2,
-  settings: { rows, mode, autoSpeak, t },
+  settings: { rows, mode, autoSpeak, srs?, t },  // srs? = { newPerDay, reviewsPerDay, showRomaji, decks }
   stats:      { [kana]: { box, seen, correct, t } },
   dictionary: { [kana]: { t, deleted: boolean } },  // saved-at time = t of last save
   bestStreak: { value, t },
-  resetAt: number            // time of the last "Reset progress", 0 if never
+  resetAt: number,           // time of the last "Reset progress", 0 if never
+  srs:         { [cardId]: { reps, ..., t } },       // scheduler state per card (js/srs.js)
+  customCards: { [id]: { id, ..., t, deleted: boolean } }
 }
 ```
 
@@ -65,13 +67,22 @@ Every mergeable item carries a timestamp `t` (ms since epoch) of its last change
 - **dictionary:** per word, keep the entry with the larger `t`. Removing a word sets
   `deleted: true` (a tombstone), so a removal on one device wins over an older save on the
   other. Tombstones are kept (they are tiny).
+- **srs:** per card, keep the entry with more reviews (`reps`); ties go to the larger `t`,
+  then the JSON string. There is no reset filter. Other entries that no winner beats on `t`
+  are kept in `srsLater` (merge-only, optional), exactly like `statsLater`; stats and srs
+  share one merge helper parameterised by the count field and the minimum `t`.
+- **customCards:** per id, keep the entry with the larger `t`, like the dictionary. Deleting
+  a card sets `deleted: true`; tombstones are kept.
+- Missing or malformed `srs`, `srsLater` and `customCards` count as empty. A v2 state saved
+  before these fields existed loads with `srs: {}` and `customCards: {}`. `settings.srs` is
+  optional and read through `srsSettings`, which fills defaults and drops bad values.
 - **resetAt:** the larger value wins. A reset clears stats and best streak, but leaves the
-  dictionary alone (matching current behaviour).
+  dictionary, `srs` and `customCards` alone.
 - **bestStreak** with `t < resetAt` is treated as `{ value: 0 }`.
 - **Ties** (equal `t`) are broken deterministically by comparing the two entries'
   JSON strings, so both devices pick the same winner.
-- `merge` is commutative and idempotent: `merge(a, b)` equals `merge(b, a)`, and
-  `merge(a, a)` equals `a`.
+- `merge` is commutative, associative and idempotent: `merge(a, b)` equals `merge(b, a)`,
+  `merge(merge(a, b), c)` equals `merge(a, merge(b, c))`, and `merge(a, a)` equals `a`.
 
 **Migration:** on first load of the new version, the existing v1 `localStorage` data
 (`hiragana-practice-v1`) is converted to v2. Settings, stats and best streak get `t = 1`

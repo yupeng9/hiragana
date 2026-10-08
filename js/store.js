@@ -11,7 +11,7 @@ const MIGRATED_T = 1;
 const UNSEEN = Object.freeze({ box: 0, seen: 0, correct: 0, t: 0 });
 
 // Everything starts at t = 0, so a brand-new device never overrides synced progress.
-// merge.js may add an optional `bestStreakLater` array and `statsLater` map (see merge.js); it is not set here.
+// merge.js may add an optional `bestStreakLater` array and `statsLater`/`srsLater` maps (see merge.js); it is not set here.
 export function emptyState() {
   return {
     version: 2,
@@ -20,6 +20,8 @@ export function emptyState() {
     dictionary: {},
     bestStreak: { value: 0, t: 0 },
     resetAt: 0,
+    srs: {},
+    customCards: {},
   };
 }
 
@@ -134,3 +136,50 @@ export function resetProgress(state, now) {
   delete state.bestStreakLater;
   state.resetAt = now;
 }
+
+// SRS settings live in the optional settings.srs and are read through srsSettings, which
+// returns a sanitised copy and never rewrites the state.
+export const SRS_DECKS = ["vocab", "kanji", "grammar", "custom"];
+const limit = (v, fallback) => (Number.isFinite(v) ? Math.min(999, Math.max(0, Math.trunc(v))) : fallback);
+
+export function srsSettings(state) {
+  const srs = isObject(state.settings?.srs) ? state.settings.srs : {};
+  return {
+    newPerDay: limit(srs.newPerDay, 10),
+    reviewsPerDay: limit(srs.reviewsPerDay, 100),
+    showRomaji: typeof srs.showRomaji === "boolean" ? srs.showRomaji : true,
+    decks: Array.isArray(srs.decks) ? SRS_DECKS.filter(d => srs.decks.includes(d)) : [...SRS_DECKS],
+  };
+}
+
+export function setSrsSettings(state, patch, now) {
+  setSettings(state, { srs: { ...srsSettings(state), ...patch } }, now);
+}
+
+// Read-only. A missing or damaged map reads as empty.
+export const srsOf = state => (isObject(state.srs) ? state.srs : {});
+
+// nextCardState comes from srs.js and already carries its own t.
+export function recordReview(state, cardId, nextCardState) {
+  if (!isObject(state.srs)) state.srs = {};
+  state.srs[cardId] = nextCardState;
+}
+
+function customCardsOf(state) {
+  if (!isObject(state.customCards)) state.customCards = {};
+  return state.customCards;
+}
+
+export function saveCustomCard(state, card, now) {
+  customCardsOf(state)[card.id] = { ...card, t: now, deleted: false };
+}
+
+// Deleting leaves a tombstone so the deletion syncs to the other device.
+export function deleteCustomCard(state, id, now) {
+  const cards = customCardsOf(state);
+  const existing = isObject(cards[id]) ? cards[id] : { id };
+  cards[id] = { ...existing, t: now, deleted: true };
+}
+
+export const liveCustomCards = state => Object.values(state.customCards ?? {})
+  .filter(c => c && typeof c === "object" && !c.deleted);

@@ -180,6 +180,19 @@ function randomState(rnd) {
   }
   if (chance(0.85)) state.bestStreak = { value: int(10), t: int(6) };
   if (chance(0.85)) state.resetAt = int(6);
+  const cards = ["vocab:ねこ", "kanji:日", "custom:c1"].slice(0, 2 + int(2));
+  if (chance(0.85)) {
+    state.srs = {};
+    for (const k of cards) {
+      if (chance(0.6)) state.srs[k] = { reps: int(4), interval: int(3), t: int(6) };
+    }
+  }
+  if (chance(0.85)) {
+    state.customCards = {};
+    for (const id of ["c1", "c2", "c3"]) {
+      if (chance(0.6)) state.customCards[id] = { id, front: chance(0.5) ? "猫" : "犬", back: "x", t: int(6), deleted: chance(0.5) };
+    }
+  }
   return state;
 }
 
@@ -254,4 +267,56 @@ test("a malformed statsLater on one side does not throw", () => {
     const m = merge(base({ stats: { か: { box: 1, seen: 2, correct: 1, t: 3 } }, statsLater: bad }), base());
     assert.equal(m.stats.か.seen, 2);
   }
+});
+
+test("the srs entry with more reps wins over a newer one", () => {
+  const long = { reps: 5, interval: 20, t: 100 };
+  const fresh = { reps: 1, interval: 1, t: 900 };
+  for (const [x, y] of [[long, fresh], [fresh, long]]) {
+    const m = merge(base({ srs: { "vocab:ねこ": x } }), base({ srs: { "vocab:ねこ": y } }));
+    assert.deepEqual(m.srs["vocab:ねこ"], long);
+    assert.deepEqual(m.srsLater, { "vocab:ねこ": [fresh] });
+  }
+});
+
+test("with equal reps the newer srs entry wins", () => {
+  const older = { reps: 2, interval: 3, t: 10 };
+  const newerEntry = { reps: 2, interval: 6, t: 20 };
+  for (const [x, y] of [[older, newerEntry], [newerEntry, older]]) {
+    const m = merge(base({ srs: { "kanji:日": x } }), base({ srs: { "kanji:日": y } }));
+    assert.deepEqual(m.srs["kanji:日"], newerEntry);
+    assert.equal(m.srsLater, undefined);
+  }
+});
+
+test("srs entries are combined per card and a reset does not touch them", () => {
+  const a = base({ resetAt: 50, srs: { "vocab:ねこ": { reps: 1, t: 10 } } });
+  const b = base({ srs: { "kanji:日": { reps: 2, t: 5 } } });
+  for (const m of [merge(a, b), merge(b, a)]) {
+    assert.deepEqual(m.srs, { "vocab:ねこ": { reps: 1, t: 10 }, "kanji:日": { reps: 2, t: 5 } });
+  }
+});
+
+test("a deleted custom card beats an older save, and a later save beats the deletion", () => {
+  const saved = { id: "c1", front: "猫", back: "cat", t: 10, deleted: false };
+  const deleted = { ...saved, t: 20, deleted: true };
+  const resaved = { ...saved, t: 30 };
+  assert.deepEqual(merge(base({ customCards: { c1: saved } }), base({ customCards: { c1: deleted } })).customCards.c1, deleted);
+  assert.deepEqual(merge(base({ customCards: { c1: deleted } }), base({ customCards: { c1: saved } })).customCards.c1, deleted);
+  assert.deepEqual(merge(base({ customCards: { c1: resaved } }), base({ customCards: { c1: deleted } })).customCards.c1, resaved);
+});
+
+test("custom cards survive a reset", () => {
+  const card = { id: "c1", front: "猫", back: "cat", t: 10, deleted: false };
+  const m = merge(base({ resetAt: 50 }), base({ customCards: { c1: card } }));
+  assert.deepEqual(m.customCards, { c1: card });
+});
+
+test("missing or malformed srs, srsLater and customCards do not throw", () => {
+  for (const bad of [undefined, null, 5, "x", [1], { "kanji:日": 7 }, { "kanji:日": [null, 7] }]) {
+    const m = merge(base({ srs: { "vocab:ねこ": { reps: 2, t: 3 } }, srsLater: bad, customCards: bad }), base({ srs: bad }));
+    assert.deepEqual(m.srs["vocab:ねこ"], { reps: 2, t: 3 });
+  }
+  assert.deepEqual(merge({}, {}).srs, {});
+  assert.deepEqual(merge({}, {}).customCards, {});
 });
