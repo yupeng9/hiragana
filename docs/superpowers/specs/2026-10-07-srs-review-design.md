@@ -30,21 +30,21 @@ New cards are introduced in deck-file order (most common first), only from enabl
 
 ## 2. Scheduling (SM-2, Anki-style)
 
-- New cards: learning steps 1 min, 10 min. Again → step 1; Hard → repeat the step (on the first step the delay is the average of the
-  two steps, 5.5 min; a lone relearning step is stretched 1.5×, to 15 min);
+- New cards: learning steps 1 min, 10 min. Again → step 1; Hard → stay on the current step:
+  5.5 min on the first learning step, 10 min on the second, 15 min for the relearning step;
   Good → next step, then graduate to 1 day; Easy → graduate to 4 days.
 - Review cards (ease starts at 2.5, minimum 1.3):
   - Again → relearning (10 min step), lapses +1, ease −0.2, interval resets to 1 day.
   - Hard → interval × 1.2, ease −0.15. Good → interval × ease. Easy → interval × ease × 1.3,
-    ease +0.15. Each is at least one day longer than the previous button's; maximum 100 years.
+    ease +0.15. Each is at least one day longer than the previous button's; maximum 100 years
+    (at the cap the buttons can tie). Intervals are rounded with `Math.round` (Anki truncates).
 - Relearning: Good → back to review at the reset interval; Easy → that interval + 1 day.
 - The day starts at 04:00 local time (as in Anki). Review cards are due "today" if due before
-  the next 04:00. Learning cards that are due now come first; learning cards due within the next 20 minutes
-  are shown early (learn ahead) only when nothing else is due.
+  the next 04:00. There is no automatic learn-ahead: a learning card that is not yet due is not
+  shown by itself; the user can open it with "Study now anyway" (see section 4).
 - Daily limits count cards first seen today (new) and cards first seen earlier but rated today
-  (reviews).
-- Queue order: learning cards due now, then due reviews (oldest first), then new cards, then
-  learning cards due within 20 minutes.
+  (reviews), only over the currently enabled cards.
+- Queue order: learning cards due now, then due reviews (oldest first), then new cards.
 - Every button shows its next interval ("10m", "3d", "2.1mo").
 
 ## 3. State and sync
@@ -73,8 +73,9 @@ Built-in deck content ships with the app (not in the gist).
 - **Overview:** per deck — due / new counts and an on/off toggle; a **Study** button; settings
   (new/day, reviews/day, show romaji); **＋ Add card**; **My cards** (list, edit, delete).
 - **Study:** the front, **Show answer** (Space), then Again / Hard / Good / Easy (keys 1–4) with
-  interval previews; 🔊 reads the Japanese; "N left". When only future learning cards remain:
-  "Come back in N min"; when nothing is left: "All done for today".
+  interval previews; 🔊 reads the Japanese; "N left". When only not-yet-due learning
+  cards remain: "Next card in N min" with a **Study now anyway** button that opens the earliest one;
+  when nothing is left: "All done for today".
 - **Add/edit card:** pick the type; the form shows that type's fields. Required: vocabulary —
   word, kana, English or Chinese; kanji — kanji, a meaning; grammar — pattern, a meaning.
 

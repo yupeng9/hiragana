@@ -7,8 +7,10 @@ export const LEARN_STEPS = [1, 10];   // minutes
 export const RELEARN_STEPS = [10];    // minutes
 export const START_EASE = 2.5;
 const MIN_EASE = 1.3, GRADUATE_DAYS = 1, EASY_DAYS = 4, HARD_FACTOR = 1.2, EASY_BONUS = 1.3;
-const MAX_DAYS = 36500, LEARN_AHEAD = 20 * MINUTE, DAY_CUTOFF_HOUR = 4;
+const MAX_DAYS = 36500, DAY_CUTOFF_HOUR = 4;
 const round2 = x => Math.round(x * 100) / 100;
+// When a card is due; a missing or non-finite due counts as 0, i.e. due now.
+const dueOf = (states, id) => Number.isFinite(states[id]?.due) ? states[id].due : 0;
 
 // card: the card's saved state, or null if it has never been reviewed.
 export function schedule(card, rating, now) {
@@ -94,15 +96,14 @@ export function buildQueue(cards, states, now, { newPerDay, reviewsPerDay }) {
     if (s.first >= start) newToday++;
     else if (s.last >= start) reviewsToday++;
   }
-  const dueOf = id => Number.isFinite(states[id]?.due) ? states[id].due : 0;   // no due = due now
   const learning = [], review = [], fresh = [];
   for (const { id, after } of cards) {
     const s = states[id];
     if (!s) { if (!after || states[after]?.phase === "review") fresh.push(id); }
-    else if (s.phase === "review") { if (dueOf(id) < end) review.push(id); }
+    else if (s.phase === "review") { if (dueOf(states, id) < end) review.push(id); }
     else learning.push(id);
   }
-  const byDue = (x, y) => dueOf(x) - dueOf(y);
+  const byDue = (x, y) => dueOf(states, x) - dueOf(states, y);
   return {
     learning: learning.sort(byDue),
     review: review.sort(byDue).slice(0, Math.max(0, reviewsPerDay - reviewsToday)),
@@ -110,13 +111,13 @@ export function buildQueue(cards, states, now, { newPerDay, reviewsPerDay }) {
   };
 }
 
-// The card to show now, or how long until a learning card is due. Like Anki: learning cards due
-// now, then reviews, then new cards, and only then learning cards due within the learn-ahead window.
+// The card to show now: learning cards due now, then reviews, then new cards. Learning cards that
+// are not yet due are never shown by themselves; when only those remain, `waitUntil` is when the
+// earliest one is due and `aheadId` is that card, for a "Study now anyway" button.
 export function nextCardId(queue, states, now) {
-  const ready = (id, t) => Number.isFinite(states[id]?.due) && states[id].due <= t;
-  const id = queue.learning.find(i => ready(i, now)) ?? queue.review[0] ?? queue.fresh[0]
-    ?? queue.learning.find(i => ready(i, now + LEARN_AHEAD)) ?? null;
-  const dues = queue.learning.map(i => states[i]?.due).filter(Number.isFinite);
-  const waitUntil = id === null && dues.length ? Math.min(...dues) : null;
-  return { id, waitUntil };
+  const id = queue.learning.find(i => dueOf(states, i) <= now) ?? queue.review[0] ?? queue.fresh[0] ?? null;
+  if (id !== null) return { id, waitUntil: null, aheadId: null };
+  const aheadId = queue.learning.reduce((best, i) =>
+    best === null || dueOf(states, i) < dueOf(states, best) ? i : best, null);
+  return { id: null, waitUntil: aheadId === null ? null : dueOf(states, aheadId), aheadId };
 }

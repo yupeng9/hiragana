@@ -153,32 +153,32 @@ test("a card with `after` becomes new only once its sibling has graduated", () =
   assert.deepEqual(buildQueue(cards, graduated, T0, { newPerDay: 9, reviewsPerDay: 9 }).fresh, ["w:p"]);
 });
 
-test("nextCardId: learning due now, then reviews, then new, then learn-ahead; reports the wait otherwise", () => {
-  const states = { l: { phase: "learning", due: T0 + 30 * MINUTE } };
-  const q = { learning: ["l"], review: [], fresh: [] };
-  assert.deepEqual(nextCardId(q, states, T0), { id: null, waitUntil: T0 + 30 * MINUTE });
-  assert.deepEqual(nextCardId(q, states, T0 + 15 * MINUTE), { id: "l", waitUntil: null });   // within 20 min learn-ahead
+const got = (id, waitUntil = null, aheadId = null) => ({ id, waitUntil, aheadId });
+
+test("nextCardId: learning due now, then reviews, then new; never learns ahead by itself", () => {
   const soon = { l: { phase: "learning", due: T0 + 5 * MINUTE } };
   const one = { learning: ["l"], review: ["r"], fresh: ["n"] };
-  assert.deepEqual(nextCardId(one, soon, T0), { id: "r", waitUntil: null });     // learn-ahead waits for reviews
-  assert.deepEqual(nextCardId({ ...one, review: [] }, soon, T0), { id: "n", waitUntil: null });   // and for new cards
-  assert.deepEqual(nextCardId({ ...one, review: [], fresh: [] }, soon, T0), { id: "l", waitUntil: null });
-  assert.deepEqual(nextCardId(one, soon, T0 + 5 * MINUTE), { id: "l", waitUntil: null });   // due now beats reviews
-  assert.deepEqual(nextCardId({ learning: [], review: ["r"], fresh: ["n"] }, {}, T0), { id: "r", waitUntil: null });
-  assert.deepEqual(nextCardId({ learning: [], review: [], fresh: ["n"] }, {}, T0), { id: "n", waitUntil: null });
-  assert.deepEqual(nextCardId({ learning: [], review: [], fresh: [] }, {}, T0), { id: null, waitUntil: null });
+  assert.deepEqual(nextCardId(one, soon, T0), got("r"));                          // not-yet-due learning waits for reviews
+  assert.deepEqual(nextCardId({ ...one, review: [] }, soon, T0), got("n"));       // and for new cards
+  assert.deepEqual(nextCardId(one, soon, T0 + 5 * MINUTE), got("l"));             // due now beats reviews
+  assert.deepEqual(nextCardId({ learning: [], review: ["r"], fresh: ["n"] }, {}, T0), got("r"));
+  assert.deepEqual(nextCardId({ learning: [], review: [], fresh: ["n"] }, {}, T0), got("n"));
+  assert.deepEqual(nextCardId({ learning: [], review: [], fresh: [] }, {}, T0), got(null));
 });
 
-test("nextCardId: waitUntil is the earliest finite due among learning cards, else null (never undefined)", () => {
-  const q = { learning: ["a", "b", "c"], review: [], fresh: [] };
-  const states = {
-    a: { phase: "learning" },                          // no due
-    b: { phase: "learning", due: T0 + 40 * MINUTE },
-    c: { phase: "learning", due: T0 + 30 * MINUTE },
-  };
-  assert.deepEqual(nextCardId(q, states, T0), { id: null, waitUntil: T0 + 30 * MINUTE });
-  const none = nextCardId(q, { a: { phase: "learning" } }, T0);
-  assert.deepEqual(none, { id: null, waitUntil: null });
-  assert.equal(none.waitUntil, null);
-  assert.equal(nextCardId({ learning: ["x"], review: [], fresh: [] }, {}, T0).waitUntil, null);   // missing state
+test("nextCardId: only not-yet-due learning cards left reports the wait and the card to study anyway", () => {
+  const states = { l: { phase: "learning", due: T0 + 15 * MINUTE } };
+  const q = { learning: ["l"], review: [], fresh: [] };
+  assert.deepEqual(nextCardId(q, states, T0), got(null, T0 + 15 * MINUTE, "l"));
+  assert.deepEqual(nextCardId({ ...q, review: [], fresh: [] }, states, T0 + 15 * MINUTE), got("l"));
+  const two = { a: { phase: "learning", due: T0 + 40 * MINUTE }, b: { phase: "learning", due: T0 + 30 * MINUTE } };
+  assert.deepEqual(nextCardId({ learning: ["a", "b"], review: [], fresh: [] }, two, T0), got(null, T0 + 30 * MINUTE, "b"));
+});
+
+test("nextCardId: a learning card without a due time counts as due now, like in buildQueue", () => {
+  const q = { learning: ["a", "b"], review: ["r"], fresh: [] };
+  const states = { a: { phase: "learning" }, b: { phase: "learning", due: T0 + 30 * MINUTE } };
+  assert.deepEqual(nextCardId(q, states, T0), got("a"));
+  assert.deepEqual(nextCardId({ learning: ["x"], review: [], fresh: [] }, {}, T0), got("x"));   // missing state too
+  assert.deepEqual(nextCardId({ learning: ["b"], review: [], fresh: [] }, states, T0), got(null, T0 + 30 * MINUTE, "b"));
 });
