@@ -82,12 +82,13 @@ export function initReview({ getState, update, knownKana, speak }) {
     if (kind === "kanji") {
       const on = list(note.on), kun = list(note.kun);
       const words = Array.isArray(note.words) ? note.words.filter(w => w && typeof w === "object") : [];
-      const say = words[0]?.kana || kun[0]?.replace(/[.-]/g, "") || on[0] || note.kanji;
+      // Each example word has its own 🔊; without words, the top button reads the kanji itself.
+      const say = words.length ? "" : kun[0]?.replace(/[.-]/g, "") || on[0] || note.kanji;
       return `<div class="rev-meaning">${meaning(note)}</div>${speakBtn(say)}
         ${on.length ? `<div class="rev-read"><b>音</b> ${on.map(esc).join("、")}</div>` : ""}
         ${kun.length ? `<div class="rev-read"><b>訓</b> ${kun.map(esc).join("、")}</div>` : ""}
         ${words.length ? `<ul class="rev-words">${words.map(w =>
-          `<li><span class="rev-w">${jp(w.word)}</span> <span class="rev-wk">${jp(w.kana)}</span> ${meaning(w)}</li>`).join("")}</ul>` : ""}`;
+          `<li><span class="rev-w">${jp(w.word)}</span> <span class="rev-wk">${jp(w.kana)}</span>${speakBtn(w.kana || w.word)} ${meaning(w)}</li>`).join("")}</ul>` : ""}`;
     }
     const exs = examplesOf(note);
     const notes = [note.note_en, note.note_zh].map(str).filter(Boolean);

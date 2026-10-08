@@ -204,6 +204,7 @@ ruby rt { font-size: .45em; color: var(--muted); }
 .rev-read b { color: var(--muted); font-weight: 500; margin-right: 6px; }
 .rev-words { list-style: none; padding: 0; margin: 12px 0 0; font-size: 16px; }
 .rev-words li { margin: 6px 0; }
+.rev-words .rev-say { margin-left: 4px; padding: 2px 8px; font-size: 14px; vertical-align: 1px; }
 .rev-w { font-size: 20px; }
 .rev-wk { color: var(--muted); }
 .rev-note { font-size: 15px; text-align: left; line-height: 1.6; margin: 8px 0; }
