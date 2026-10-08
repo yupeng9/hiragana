@@ -26,7 +26,8 @@ between iPhone and Mac through the existing gist sync.
 | Grammar | `g:<id>` | pattern + one short example | meaning (EN/ZH), explanation, 2 examples |
 | Custom | `c:<id>:r` (+ `c:<id>:p` for vocabulary) | as for the matching type | as for the matching type |
 
-New cards are introduced in deck-file order (most common first), only from enabled decks.
+New cards are introduced from enabled decks in turn, one note per deck (vocab 1, kanji 1, grammar 1,
+custom 1, vocab 2, …), keeping each deck's file order (most common first).
 
 ## 2. Scheduling (SM-2, Anki-style)
 
@@ -58,9 +59,10 @@ settings.srs: { newPerDay, reviewsPerDay, showRomaji, decks: ["vocab","kanji","g
 ```
 
 Merge rules (same guarantees as before: commutative, associative, idempotent):
-- **srs:** per card, the entry with more `reps` wins, then newer `t`, then canonical JSON; the
-  same "unbeaten entries" side-set technique as `stats`/`statsLater` keeps it associative
-  (`srsLater`). "Reset progress" does not touch SRS.
+- **srs:** per card, the entry with more `reps` wins, then newer `t`, then canonical JSON. There is
+  no reset filter, so this maximum is already associative and no side-set is kept (no `srsLater`).
+  "Reset progress" does not touch SRS. A device that repeats a card's learning steps many times can
+  out-count another device's entry for that card; this is accepted.
 - **customCards:** newer `t` wins; deleting sets `deleted: true` (tombstone), like the dictionary.
 - **settings.srs:** part of `settings` (newest wins); read through a sanitiser that fills
   defaults and clamps limits to 0–999.
