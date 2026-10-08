@@ -26,7 +26,7 @@
 - **Commit message:** end every commit message with a blank line followed by `Co-Authored-By: Claude <noreply@anthropic.com>`.
 - **Service worker version:**
   - Any change to a file listed in `sw.js` `FILES` requires `npm run bump-sw` before committing.
-  - New runtime files must be added to `FILES`. A test enforces this for `js/` and `css/`, but not for `js/decks/` (Task 10 extends it).
+  - Each task adds its own new runtime files (including `js/decks/*.js`) to `FILES` and runs `npm run bump-sw` in the same task, so `npm test` stays green on every commit.
 - **Existing state shape**, from `js/store.js` `emptyState()`:
   - `{ version: 2, settings: { rows, mode, autoSpeak, t }, stats, dictionary, bestStreak, resetAt }`
   - plus the merge-only optional fields `statsLater` and `bestStreakLater`.
