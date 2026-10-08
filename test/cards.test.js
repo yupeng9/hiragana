@@ -9,10 +9,12 @@ import { GRAMMAR } from "../js/decks/grammar.js";
 
 const NOW = new Date(2026, 9, 7, 10, 0).getTime();
 
-test("built-in cards come in deck order, with vocab recognition and production interleaved", () => {
+test("built-in decks are interleaved one note at a time, vocab recognition and production together", () => {
   const cards = allCards(emptyState());
   const w = VOCAB[0].word, w2 = VOCAB[1].word;
-  assert.deepEqual(cards.slice(0, 4).map(c => c.id), [`v:${w}:r`, `v:${w}:p`, `v:${w2}:r`, `v:${w2}:p`]);
+  assert.deepEqual(cards.slice(0, 9).map(c => c.id), [
+    `v:${w}:r`, `v:${w}:p`, `k:${KANJI[0].kanji}`, `g:${GRAMMAR[0].id}`,
+    `v:${w2}:r`, `v:${w2}:p`, `k:${KANJI[1].kanji}`, `g:${GRAMMAR[1].id}`, `v:${VOCAB[2].word}:r`]);
   assert.deepEqual(cards[0], { id: `v:${w}:r`, deck: "vocab", kind: "recognition", note: VOCAB[0] });
   assert.deepEqual(cards[1], { id: `v:${w}:p`, deck: "vocab", kind: "production", note: VOCAB[0], after: `v:${w}:r` });
   const k = cards.find(c => c.deck === "kanji");
@@ -20,12 +22,12 @@ test("built-in cards come in deck order, with vocab recognition and production i
   const g = cards.find(c => c.deck === "grammar");
   assert.deepEqual(g, { id: `g:${GRAMMAR[0].id}`, deck: "grammar", kind: "grammar", note: GRAMMAR[0] });
   assert.equal(cards.length, VOCAB.length * 2 + KANJI.length + GRAMMAR.length);
-  const firstOf = d => cards.findIndex(c => c.deck === d);
-  assert.ok(firstOf("vocab") < firstOf("kanji") && firstOf("kanji") < firstOf("grammar"));
+  // Decks that run out are skipped: the tail is vocabulary only.
+  assert.ok(cards.slice(-10).every(c => c.deck === "vocab"));
   assert.equal(new Set(cards.map(c => c.id)).size, cards.length);
 });
 
-test("custom cards follow the built-in decks, oldest first, with ids by type", () => {
+test("custom cards take their turn after grammar, oldest first, with ids by type", () => {
   const s = emptyState();
   saveCustomCard(s, { id: "b", type: "kanji", kanji: "猫" }, 200);
   saveCustomCard(s, { id: "a", type: "vocab", word: "犬", kana: "いぬ" }, 100);
@@ -35,8 +37,9 @@ test("custom cards follow the built-in decks, oldest first, with ids by type", (
   assert.deepEqual(custom.map(c => c.kind), ["recognition", "production", "kanji", "grammar"]);
   assert.equal(custom[1].after, "c:a:r");
   assert.equal(custom[0].note.word, "犬");
-  const all = allCards(s);
-  assert.equal(all.at(-4).id, "c:a:r");
+  const ids = allCards(s).map(c => c.id);
+  assert.deepEqual(ids.slice(4, 6), ["c:a:r", "c:a:p"]);
+  assert.equal(ids[10], "c:b");
 });
 
 test("a disabled deck is excluded", () => {
@@ -78,10 +81,11 @@ test("counts: due is learning cards due now plus reviews due today; fresh is gro
   recordReview(s, `k:${KANJI[0].kanji}`, { ...review, due: NOW + 3 * DAY, t: 1 });
   recordReview(s, `g:${GRAMMAR[0].id}`, { ...review, due: NOW + 2 * DAY, t: 1 });
   const c = deckCounts(s, NOW);
-  assert.deepEqual(c.vocab, { due: 2, fresh: 3 });
-  assert.deepEqual(c.kanji, { due: 0, fresh: 0 });
+  // fresh, in order: VOCAB[0]'s production (its recognition has graduated), custom 犬, KANJI[1]
+  assert.deepEqual(c.vocab, { due: 2, fresh: 1 });
+  assert.deepEqual(c.kanji, { due: 0, fresh: 1 });
   assert.deepEqual(c.grammar, { due: 0, fresh: 0 });
-  assert.deepEqual(c.custom, { due: 0, fresh: 0 });
+  assert.deepEqual(c.custom, { due: 0, fresh: 1 });
   assert.deepEqual(c.total, { due: 2, fresh: 3 });
 });
 
@@ -89,7 +93,17 @@ test("counts: the daily new limit is shared across decks, and disabled decks sho
   const s = emptyState();
   setSrsSettings(s, { newPerDay: 2, decks: ["kanji", "grammar"] }, 1);
   const c = deckCounts(s, NOW);
-  assert.deepEqual(c.kanji, { due: 0, fresh: 2 });
+  assert.deepEqual(c.kanji, { due: 0, fresh: 1 });
+  assert.deepEqual(c.grammar, { due: 0, fresh: 1 });
   assert.deepEqual(c.vocab, { due: 0, fresh: 0 });
   assert.deepEqual(c.total, { due: 0, fresh: 2 });
+});
+
+test("new cards mix the decks: with 3 new a day they come from three different decks", () => {
+  const s = emptyState();
+  setSrsSettings(s, { newPerDay: 3 }, 1);
+  const fresh = studyQueue(s, NOW).fresh;
+  const deckOf = new Map(allCards(s).map(c => [c.id, c.deck]));
+  assert.equal(fresh.length, 3);
+  assert.equal(new Set(fresh.map(id => deckOf.get(id))).size, 3);
 });

@@ -17,9 +17,10 @@ function vocabCards(deck, prefix, note) {
   ];
 }
 
-function customCards(state) {
+// Custom cards per note, oldest first; each entry is that note's cards.
+function customNotes(state) {
   const live = liveCustomCards(state).sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
-  return live.flatMap(note => {
+  return live.map(note => {
     const prefix = `c:${note.id}`;
     if (note.type === "vocab") return vocabCards("custom", prefix, note);
     if (note.type === "kanji") return [{ id: prefix, deck: "custom", kind: "kanji", note }];
@@ -28,14 +29,20 @@ function customCards(state) {
   });
 }
 
+// Enabled decks interleaved one note at a time (vocab 1, kanji 1, grammar 1, custom 1, vocab 2, …),
+// so new cards mix the decks; a deck that runs out is skipped.
 export function allCards(state) {
   const on = new Set(srsSettings(state).decks);
-  return [
-    ...(on.has("vocab") ? VOCAB.flatMap(n => vocabCards("vocab", `v:${n.word}`, n)) : []),
-    ...(on.has("kanji") ? KANJI.map(n => ({ id: `k:${n.kanji}`, deck: "kanji", kind: "kanji", note: n })) : []),
-    ...(on.has("grammar") ? GRAMMAR.map(n => ({ id: `g:${n.id}`, deck: "grammar", kind: "grammar", note: n })) : []),
-    ...(on.has("custom") ? customCards(state) : []),
+  const decks = [
+    on.has("vocab") ? VOCAB.map(n => vocabCards("vocab", `v:${n.word}`, n)) : [],
+    on.has("kanji") ? KANJI.map(n => [{ id: `k:${n.kanji}`, deck: "kanji", kind: "kanji", note: n }]) : [],
+    on.has("grammar") ? GRAMMAR.map(n => [{ id: `g:${n.id}`, deck: "grammar", kind: "grammar", note: n }]) : [],
+    on.has("custom") ? customNotes(state) : [],
   ];
+  const longest = Math.max(...decks.map(d => d.length));
+  const out = [];
+  for (let i = 0; i < longest; i++) for (const d of decks) if (i < d.length) out.push(...d[i]);
+  return out;
 }
 
 export const studyQueue = (state, now) => buildQueue(allCards(state), srsOf(state), now, srsSettings(state));

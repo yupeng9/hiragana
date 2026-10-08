@@ -56,8 +56,14 @@ export function initReview({ getState, update, knownKana, speak }) {
   const examplesOf = note => (Array.isArray(note.ex) ? note.ex : note.ex ? [note.ex] : []);
   const speakBtn = text => (str(text) ? `<button class="btn rev-say" data-speak="${esc(text)}" title="Listen">🔊</button>` : "");
 
-  function frontHtml({ kind, note }) {
-    if (kind === "recognition") return `<div class="rev-front big">${jp(note.word)}</div>`;
+  // A word written only in kana is its own reading: once revealed, the front itself gets the
+  // pitch / romaji line and the back does not repeat it.
+  const kanaOnly = note => str(note.word) !== "" && note.word === note.kana;
+
+  function frontHtml({ kind, note }, shown) {
+    if (kind === "recognition") {
+      return `<div class="rev-front big">${shown && kanaOnly(note) ? kanaHtml(note.kana, note.accent) : jp(note.word)}</div>`;
+    }
     if (kind === "production") return `<div class="hint">How do you say…?</div><div class="rev-front mid">${meaning(note)}</div>`;
     if (kind === "kanji") return `<div class="rev-front huge">${esc(note.kanji)}</div>`;
     const first = examplesOf(note)[0];
@@ -66,7 +72,7 @@ export function initReview({ getState, update, knownKana, speak }) {
 
   function backHtml({ kind, note }) {
     if (kind === "recognition") {
-      return `${kanaHtml(note.kana, note.accent)}${speakBtn(note.kana)}
+      return `${kanaOnly(note) ? "" : kanaHtml(note.kana, note.accent)}${speakBtn(note.kana)}
         <div class="rev-meaning">${meaning(note)}</div>${exampleHtml(note.ex)}`;
     }
     if (kind === "production") {
@@ -75,7 +81,7 @@ export function initReview({ getState, update, knownKana, speak }) {
     }
     if (kind === "kanji") {
       const on = list(note.on), kun = list(note.kun);
-      const words = Array.isArray(note.words) ? note.words : [];
+      const words = Array.isArray(note.words) ? note.words.filter(w => w && typeof w === "object") : [];
       const say = words[0]?.kana || kun[0]?.replace(/[.-]/g, "") || on[0] || note.kanji;
       return `<div class="rev-meaning">${meaning(note)}</div>${speakBtn(say)}
         ${on.length ? `<div class="rev-read"><b>音</b> ${on.map(esc).join("、")}</div>` : ""}
@@ -113,8 +119,10 @@ export function initReview({ getState, update, knownKana, speak }) {
     }).join("");
     const total = counts.total.due + counts.total.fresh;
     $("revStudyBtn").textContent = total ? `Study (${total})` : "Study";
-    $("revNewPerDay").value = settings.newPerDay;
-    $("revReviewsPerDay").value = settings.reviewsPerDay;
+    // Never overwrite a number the user is in the middle of typing.
+    for (const [id, v] of [["revNewPerDay", settings.newPerDay], ["revReviewsPerDay", settings.reviewsPerDay]]) {
+      if (document.activeElement !== $(id)) $(id).value = v;
+    }
     $("revShowRomaji").checked = settings.showRomaji;
   }
 
@@ -187,7 +195,7 @@ export function initReview({ getState, update, knownKana, speak }) {
     const card = cardById(currentId);
     if (!card) { nextCard(); return; }
     renderLeft();
-    let html = `<div class="rev-face">${frontHtml(card)}</div>`;
+    let html = `<div class="rev-face">${frontHtml(card, revealed)}</div>`;
     if (!revealed) {
       html += `<div class="actions"><button class="btn primary" data-reveal>Show answer</button></div>`;
     } else {
@@ -239,6 +247,7 @@ export function initReview({ getState, update, knownKana, speak }) {
     $("revFormMsg").textContent = "";
     $("revEditTitle").textContent = note ? "Edit card" : "Add card";
     $("revDeleteBtn").hidden = !note;
+    $("revType").disabled = !!note;
     if (note) {
       $("revType").value = ["vocab", "kanji", "grammar"].includes(note.type) ? note.type : "vocab";
       for (const k of ["word", "kana", "kanji", "pattern", "en", "zh"]) field(k).value = str(note[k]);
@@ -288,6 +297,10 @@ export function initReview({ getState, update, knownKana, speak }) {
     e.preventDefault();
     const { card, error } = readForm();
     if (error) { $("revFormMsg").textContent = error; return; }
+    if (editingId && !findCustom(editingId)) {
+      $("revFormMsg").textContent = "This card was deleted on another device.";
+      return;
+    }
     const id = editingId ?? newId();
     update((s, now) => saveCustomCard(s, { ...card, id }, now));
     leaveEdit();
@@ -338,6 +351,7 @@ export function initReview({ getState, update, knownKana, speak }) {
   document.addEventListener("keydown", e => {
     if (!reviewVisible() || panel !== "revStudy" || !currentId) return;
     if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.("input, textarea, select")) return;
+    if ((e.key === "Enter" || e.key === " ") && e.target.closest?.("button")) return;   // the button handles it
     if (!revealed && (e.key === " " || e.key === "Enter")) { e.preventDefault(); reveal(); }
     else if (revealed && /^[1-4]$/.test(e.key)) { e.preventDefault(); rate(Number(e.key)); }
   });
@@ -352,5 +366,12 @@ export function initReview({ getState, update, knownKana, speak }) {
 
   show("revOverview");
   renderOverview();
-  return { refresh };
+  // Tapping the Review tab while already studying goes back to the deck overview.
+  function home() {
+    if (panel !== "revStudy") return;
+    show("revOverview");
+    renderOverview();
+  }
+
+  return { refresh, home };
 }

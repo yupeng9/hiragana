@@ -195,6 +195,7 @@ ruby rt { font-size: .45em; color: var(--muted); }
 .rev-front.huge { font-size: 120px; line-height: 1.2; }
 .rev-back { border-top: 1px dashed var(--line); margin-top: 16px; padding-top: 16px; }
 .rev-kana { font-size: 30px; }
+.rev-front .rev-kana { font-size: inherit; }
 .rev-say { margin-left: 8px; vertical-align: 4px; }
 .rev-meaning { font-size: 20px; margin: 10px 0; }
 .zh { color: var(--muted); }

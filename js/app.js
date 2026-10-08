@@ -421,6 +421,8 @@ window.addEventListener("online", () => syncer?.run().catch(e => console.error("
 
 // ---------- Navigation ----------
 document.querySelectorAll("[data-view]").forEach(b => b.addEventListener("click", () => {
+  // Tapping Review again while on it goes "home" to the deck overview.
+  if (b.dataset.view === "review" && $("review").classList.contains("active")) review.home();
   document.querySelectorAll("nav button").forEach(x => x.classList.toggle("active", x === b));
   document.querySelectorAll(".view").forEach(v => v.classList.toggle("active", v.id === b.dataset.view));
   if (b.dataset.view === "progress") renderProgress();
