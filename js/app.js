@@ -5,6 +5,9 @@ import {
 } from "./store.js";
 import { merge, canonical } from "./merge.js";
 import { GistClient, Syncer, connect, loadConfig, saveConfig, clearConfig } from "./sync.js";
+import { moraHtml, accentMarkHtml } from "./pitch.js";
+import { deckCounts } from "./cards.js";
+import { initReview } from "./review.js";
 
 let state = loadState(localStorage);
 saveState(localStorage, state);  // persists a v1 → v2 migration straight away
@@ -31,28 +34,13 @@ const starHtml = kana => {
   return `<button class="star ${on ? "on" : ""}" data-save="${kana}" title="Save to my dictionary">${on ? "★" : "☆"}</button>`;
 };
 
-const CIRCLED = "⓪①②③④⑤⑥⑦⑧⑨";
-
-// Which morae are high in Tokyo pitch accent: 0 = low-high-high…, 1 = high-low-low…,
-// n ≥ 2 = low, high up to mora n, then low.
-const isHigh = (i, accent) => accent === 0 ? i > 0 : accent === 1 ? i === 0 : i > 0 && i < accent;
-
-function accentTitle(w) {
-  const n = [...w.kana].length;
-  const how = w.accent === 0 ? "flat: starts low, rises, never drops"
-    : w.accent === n ? "rises, drops right after the word (on a following particle)"
-    : `pitch drops after mora ${w.accent}`;
-  return `Pitch accent ${w.accent}: ${how}. ${n} mora${n > 1 ? "e" : ""}.`;
-}
-
 // opts.highlight: kana to highlight. opts.hidden: during a question, hide whatever would give
 // the answer away — the target kana becomes "？" in pick mode, the romaji is hidden in type mode.
 function wordHtml(w, { highlight, hidden } = {}) {
   const kana = [...w.kana].map((ch, i) => {
     const shown = ch !== highlight ? ch : hidden === "kana" ? `<mark>？</mark>` : `<mark>${ch}</mark>`;
-    const cls = (isHigh(i, w.accent) ? " hi" : "") + (i === w.accent - 1 ? " drop" : "");
-    return `<span class="m${cls}">${shown}</span>`;
-  }).join("") + `<span class="acc" title="${accentTitle(w)}">${CIRCLED[w.accent]}</span>`;
+    return moraHtml(shown, i, w.accent);
+  }).join("") + accentMarkHtml(w.kana, w.accent);
   const romaji = hidden ? "answer to reveal" : `${w.romaji} 🔊`;
   return `<div class="word ${hidden ? "locked" : ""}" ${hidden ? "" : `data-say="${w.kana}" title="Click to hear"`}>
     ${starHtml(w.kana)}
@@ -301,6 +289,27 @@ $("resetBtn").addEventListener("click", () => {
   renderProgress();
 });
 
+// ---------- Review ----------
+function updateReviewBadge() {
+  const { due, fresh } = deckCounts(state, Date.now()).total;
+  const badge = $("reviewBadge");
+  badge.hidden = due + fresh === 0;
+  badge.textContent = due + fresh;
+}
+
+const review = initReview({
+  getState: () => state,
+  update: fn => { fn(state, Date.now()); persist(); updateReviewBadge(); },
+  knownKana: () => new Set(pool().map(c => c.kana)),
+  speak,
+});
+
+// Learning cards come due by the minute, so recount while the app is open.
+setInterval(() => {
+  updateReviewBadge();
+  if ($("review").classList.contains("active")) review.refresh();
+}, 60_000);
+
 // ---------- Sync ----------
 let syncer = null;
 
@@ -337,7 +346,9 @@ function applyRemote(remote) {
     renderChart();
     if (!answered && current && !activeRows(state).includes(current.row)) nextCard();
   }
+  updateReviewBadge();
   const view = document.querySelector(".view.active").id;
+  if (view === "review") review.refresh();
   if (view === "words") renderWords();
   if (view === "dictionary") renderDictionary();
   if (view === "progress") renderProgress();
@@ -402,7 +413,9 @@ $("disconnectBtn").addEventListener("click", () => {
 });
 
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") syncer?.run().catch(e => console.error("sync failed", e));
+  if (document.visibilityState !== "visible") return;
+  updateReviewBadge();
+  syncer?.run().catch(e => console.error("sync failed", e));
 });
 window.addEventListener("online", () => syncer?.run().catch(e => console.error("sync failed", e)));
 
@@ -414,6 +427,7 @@ document.querySelectorAll("[data-view]").forEach(b => b.addEventListener("click"
   if (b.dataset.view === "words") renderWords();
   if (b.dataset.view === "dictionary") renderDictionary();
   if (b.dataset.view === "sync") renderSyncPanel();
+  if (b.dataset.view === "review") review.refresh();
   if (b.dataset.view === "practice" && currentMode === "type" && !answered) $("answer")?.focus();
 }));
 
@@ -425,6 +439,7 @@ renderRowToggles();
 renderChart();
 nextCard();
 renderSyncPanel();
+updateReviewBadge();
 const config = loadConfig(localStorage);
 if (config) startSync(config).catch(e => console.error("sync failed", e)); else showStatus({ kind: "off" });
 

@@ -21,6 +21,7 @@
   <h1>ひらがな <span>Practice</span></h1>
   <nav>
     <button data-view="practice" class="active"><span class="ico">✏️</span><span class="lbl">Practice</span></button>
+    <button data-view="review"><span class="ico">🗂️</span><span class="lbl">Review</span><b class="badge" id="reviewBadge" hidden></b></button>
     <button data-view="chart"><span class="ico">あ</span><span class="lbl">Chart</span></button>
     <button data-view="words"><span class="ico">📖</span><span class="lbl">Words</span></button>
     <button data-view="dictionary"><span class="ico">⭐</span><span class="lbl">Dictionary</span></button>
@@ -59,6 +60,72 @@
       <div>Session: <b id="sCorrect">0</b> / <b id="sTotal">0</b></div>
       <div>Streak: <b id="sStreak">0</b></div>
       <div>Best streak: <b id="sBest">0</b></div>
+    </div>
+  </section>
+
+  <!-- Review -->
+  <section id="review" class="view">
+    <div id="revOverview">
+      <div class="rev-decks" id="revDecks"></div>
+      <button class="btn primary rev-study-btn" id="revStudyBtn">Study</button>
+      <div class="rev-settings">
+        <label>New cards/day <input type="number" id="revNewPerDay" min="0" max="999" inputmode="numeric"></label>
+        <label>Reviews/day <input type="number" id="revReviewsPerDay" min="0" max="999" inputmode="numeric"></label>
+        <label><input type="checkbox" id="revShowRomaji"> Show romaji for kana I haven't learned</label>
+      </div>
+      <div class="actions">
+        <button class="btn" id="revAddBtn">＋ Add card</button>
+        <button class="btn" id="revListBtn">My cards</button>
+      </div>
+    </div>
+
+    <div id="revStudy" hidden>
+      <div class="rev-bar">
+        <button class="btn" data-rev-back>← Decks</button>
+        <span class="muted" id="revLeft"></span>
+      </div>
+      <div class="card rev-card" id="revCard"></div>
+    </div>
+
+    <form id="revEdit" class="rev-form" hidden novalidate>
+      <h2 id="revEditTitle">Add card</h2>
+      <label>Type
+        <select id="revType" name="type">
+          <option value="vocab">Vocabulary</option>
+          <option value="kanji">Kanji</option>
+          <option value="grammar">Grammar</option>
+        </select>
+      </label>
+      <label data-for="vocab">Word <input name="word" placeholder="e.g. 猫"></label>
+      <label data-for="vocab">Kana <input name="kana" placeholder="e.g. ねこ"></label>
+      <label data-for="kanji">Kanji <input name="kanji" placeholder="e.g. 猫"></label>
+      <label data-for="kanji">On'yomi 音 <input name="on" placeholder="comma-separated, e.g. ビョウ"></label>
+      <label data-for="kanji">Kun'yomi 訓 <input name="kun" placeholder="comma-separated, e.g. ねこ"></label>
+      <label data-for="grammar">Pattern <input name="pattern" placeholder="e.g. 〜てください"></label>
+      <label>English <input name="en"></label>
+      <label>Chinese <input name="zh"></label>
+      <label data-for="grammar">Notes <textarea name="notes" rows="3"></textarea></label>
+      <fieldset data-for="vocab grammar">
+        <legend>Example (optional)</legend>
+        <label>Japanese <input name="exJp"></label>
+        <label>Kana reading <input name="exKana"></label>
+        <label>English <input name="exEn"></label>
+        <label>Chinese <input name="exZh"></label>
+      </fieldset>
+      <p class="rev-msg" id="revFormMsg" role="alert"></p>
+      <div class="actions">
+        <button type="submit" class="btn primary">Save</button>
+        <button type="button" class="btn" id="revCancelBtn">Cancel</button>
+        <button type="button" class="btn danger" id="revDeleteBtn" hidden>Delete</button>
+      </div>
+    </form>
+
+    <div id="revList" hidden>
+      <div class="rev-bar">
+        <button class="btn" data-rev-back>← Decks</button>
+        <button class="btn" id="revListAddBtn">＋ Add card</button>
+      </div>
+      <div id="revListItems"></div>
     </div>
   </section>
 
