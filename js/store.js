@@ -1,6 +1,6 @@
 // Local progress state: shape, persistence, v1 migration, and every mutation.
 // Each mutation stamps the changed item with `t` so merge.js can sync it.
-import { ROWS, DEFAULT_ROWS, MAX_BOX } from "./data.js";
+import { ROWS, DEFAULT_ROWS, MAX_BOX, scriptRows, SMALL_BASE } from "./data.js";
 
 export const STORE_KEY = "hiragana-practice-v2";
 export const LEGACY_KEY = "hiragana-practice-v1";
@@ -98,9 +98,27 @@ export const savedWords = state => Object.entries(state.dictionary)
 // Settings come from storage or another device, so the UI reads them through these two
 // instead of trusting them. They never rewrite the state.
 const ROW_IDS = new Set(ROWS.map(r => r.id));
-export function activeRows(state) {
-  const rows = Array.isArray(state.settings.rows) ? state.settings.rows.filter(id => ROW_IDS.has(id)) : [];
-  return rows.length ? rows : [...DEFAULT_ROWS];
+export const activeScript = state => (state.settings.script === "kata" ? "kata" : "hira");
+
+// Hiragana always has at least the default rows; katakana starts with none learned.
+export function activeRows(state, script = "hira") {
+  const raw = state.settings[script === "kata" ? "krows" : "rows"];
+  const rows = Array.isArray(raw) ? raw.filter(id => ROW_IDS.has(id)) : [];
+  return script === "kata" || rows.length ? rows : [...DEFAULT_ROWS];
+}
+
+// Every character the learner has met: learned rows of both scripts, the long-vowel mark, and
+// each small kana whose full-size kana is learned. Drives word filtering and the Review reading aid.
+export function knownChars(state) {
+  const known = new Set(["ー"]);
+  for (const script of ["hira", "kata"]) {
+    const learned = new Set(activeRows(state, script));
+    for (const row of scriptRows(script)) {
+      if (learned.has(row.id)) for (const c of row.chars) if (c) known.add(c[0]);
+    }
+  }
+  for (const [small, base] of Object.entries(SMALL_BASE)) if (known.has(base)) known.add(small);
+  return known;
 }
 
 const MODES = ["type", "pick", "mixed"];

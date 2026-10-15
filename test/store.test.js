@@ -2,11 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   STORE_KEY, LEGACY_KEY, emptyState, loadState, saveState, statOf, isSaved, savedWords,
-  toggleWord, recordAnswer, updateBest, setSettings, resetProgress, activeRows, activeMode,
+  toggleWord, recordAnswer, updateBest, setSettings, resetProgress, activeRows, activeMode, activeScript, knownChars,
   srsSettings, setSrsSettings, recordReview, srsOf, saveCustomCard, deleteCustomCard, liveCustomCards,
 } from "../js/store.js";
 import { DEFAULT_ROWS, MAX_BOX } from "../js/data.js";
 import { merge, canonical } from "../js/merge.js";
+import { rubyHtml } from "../js/romaji.js";
 
 const memoryStorage = (data = {}) => ({
   data,
@@ -397,4 +398,46 @@ test("resetProgress leaves srs and custom cards alone", () => {
   resetProgress(s, 50);
   assert.deepEqual(s.srs, { "kanji:日": { reps: 3, t: 10 } });
   assert.equal(liveCustomCards(s).length, 1);
+});
+
+test("activeScript defaults to hiragana and ignores bad values", () => {
+  const s = emptyState();
+  assert.equal(activeScript(s), "hira");
+  for (const v of ["", "Kata", 1, null, undefined, {}]) { s.settings.script = v; assert.equal(activeScript(s), "hira"); }
+  s.settings.script = "kata";
+  assert.equal(activeScript(s), "kata");
+});
+
+test("katakana rows start empty, drop unknown ids, and never fall back to defaults", () => {
+  const s = emptyState();
+  assert.deepEqual(activeRows(s, "kata"), []);
+  for (const v of ["a", null, { 0: "a" }, ["zz"]]) { s.settings.krows = v; assert.deepEqual(activeRows(s, "kata"), []); }
+  s.settings.krows = ["ta", "zz", "a"];
+  assert.deepEqual(activeRows(s, "kata"), ["ta", "a"]);
+  assert.deepEqual(s.settings.krows, ["ta", "zz", "a"], "does not rewrite state");
+  assert.deepEqual(activeRows(s), DEFAULT_ROWS, "hiragana is unaffected");
+});
+
+test("knownChars covers learned rows in both scripts, ー, and small kana", () => {
+  const s = emptyState();                      // hiragana a ka sa ta, no katakana
+  let known = knownChars(s);
+  assert.ok(known.has("か") && known.has("ー"));
+  assert.ok(!known.has("カ"), "katakana is unknown until its row is learned");
+  assert.ok(known.has("っ"), "っ follows つ (ta row)");
+  assert.ok(!known.has("ゃ"), "ゃ needs や");
+  s.settings.krows = ["ka", "ya"];
+  known = knownChars(s);
+  assert.ok(known.has("カ") && known.has("ヤ") && known.has("ャ") && known.has("ョ"));
+  assert.ok(!known.has("ッ"), "ッ needs ツ");
+  assert.ok(!known.has("サ"));
+});
+
+test("the Review reading aid follows katakana and small-kana progress", () => {
+  const s = emptyState();
+  assert.match(rubyHtml("コーヒー", knownChars(s)), /<ruby>コー<rt>koo<\/rt><\/ruby>/);
+  s.settings.krows = ["ka", "ha"];
+  assert.equal(rubyHtml("コーヒー", knownChars(s)), "コーヒー");
+  assert.match(rubyHtml("きょう", knownChars(s)), /<ruby>きょ<rt>kyo<\/rt><\/ruby>/, "ょ still needs よ");
+  s.settings.rows = ["a", "ka", "ya"];
+  assert.equal(rubyHtml("きょう", knownChars(s)), "きょう");
 });

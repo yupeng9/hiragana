@@ -357,3 +357,11 @@ test("missing or malformed srs, srsLater and customCards do not throw", () => {
   assert.deepEqual(merge({}, {}).srs, {});
   assert.deepEqual(merge({}, {}).customCards, {});
 });
+
+test("script and katakana rows travel with the newest settings", () => {
+  const a = base({ settings: { rows: ["a"], mode: "type", autoSpeak: false, t: 5 } });
+  const b = base({ settings: { rows: ["a"], krows: ["ka"], script: "kata", mode: "type", autoSpeak: false, t: 9 } });
+  assert.deepEqual(merge(a, b).settings.krows, ["ka"]);
+  assert.equal(merge(b, a).settings.script, "kata");
+  assert.equal(canonical(merge(a, b)), canonical(merge(b, a)));
+});
