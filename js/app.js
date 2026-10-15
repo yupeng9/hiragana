@@ -165,7 +165,8 @@ function nextCard() {
   lastKana = current.kana;
   answered = false;
   const mode = activeMode(state);
-  currentMode = mode === "mixed" ? (Math.random() < 0.5 ? "type" : "pick") : mode;
+  const wanted = mode === "mixed" ? (Math.random() < 0.5 ? "type" : "pick") : mode;
+  currentMode = wanted === "pick" && pool().length < 4 ? "type" : wanted;  // too few choices would give the answer away
   $("feedback").textContent = "";
   $("feedback").className = "feedback";
   $("nextBtn").style.display = "none";
@@ -375,6 +376,7 @@ function showStatus(status) {
 function applyRemote(remote) {
   const viewKey = () => JSON.stringify([script(), activeRows(state, "hira"), activeRows(state, "kata")]);
   const viewBefore = viewKey();
+  const scriptBefore = script();
   const before = canonical(state);
   state = merge(state, remote);
   if (canonical(state) === before) return;  // nothing new from the other device
@@ -388,7 +390,11 @@ function applyRemote(remote) {
     renderScriptSwitch();
     renderRowToggles();
     renderChart();
-    if (!answered && (!current || !pool().some(c => c.kana === current.kana))) nextCard();
+    if (script() !== scriptBefore || (!answered && (!current || !pool().some(c => c.kana === current.kana)))) nextCard();
+    else if (!answered && current) {  // same card, but more words may have unlocked
+      currentWords = wordsWith(current.kana, 3);
+      $("examples").innerHTML = examplesHtml(current.kana, currentWords, currentMode === "type" ? "romaji" : "kana");
+    }
   }
   updateReviewBadge();
   const view = document.querySelector(".view.active").id;

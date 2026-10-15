@@ -3,15 +3,15 @@ import assert from "node:assert/strict";
 import { VOCAB } from "../js/decks/vocab.js";
 import { KANJI } from "../js/decks/kanji.js";
 import { GRAMMAR } from "../js/decks/grammar.js";
+import { morae as morae_ } from "../js/pitch.js";
 
 // hiragana, katakana, ー, Japanese punctuation/fullwidth forms, ideographic space and ASCII space
 const KANA = /^[぀-ゟ゠-ヿ　-〿！-～ ・ー〜～]+$/u;
 const KATAKANA = /^[゠-ヿー]+$/u;
 const KUN = /^-?[぀-ゟ.]+-?$/u;
-const SMALL = /[ゃゅょァィゥェォャュョ]/gu;
 
 const nonEmpty = v => typeof v === "string" && v.trim() !== "";
-const morae = kana => [...kana.replace(SMALL, "")].length;
+const morae = kana => morae_(kana).length;
 
 function checkExample(ex, label) {
   assert.ok(ex && typeof ex === "object", `${label}: example missing`);

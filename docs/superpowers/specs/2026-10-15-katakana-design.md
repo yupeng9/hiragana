@@ -40,8 +40,11 @@ Decisions from the brainstorm:
   existing readers and never rewrite state.
 - No new top-level keys, no schema bump, no merge change: `settings` is still newest-`t`-wins,
   and `stats` / `dictionary` are keyed by the character or word, which already differ.
-- Old app versions keep unknown settings fields when they spread `...state.settings`, so an
-  un-updated device does not erase `krows`. Tests cover merge round-trips with the new fields.
+- Settings sync as one object, newest `t` wins, so a script switch or row change on one device
+  can overwrite an unsynced settings change on another (known limit, same as `rows` today).
+  An app version without this feature keeps `script`/`krows` when it merges them before its
+  own change; an un-updated device that changes settings before its first sync after the
+  upgrade drops them. Open the app on each device once to update. Tests cover merge round-trips.
 - Dictionary: a saved katakana word is stored by its kana like any other. `renderDictionary`
   looks words up in `WORDS` then `KATA_WORDS`.
 
@@ -72,6 +75,7 @@ character must be in it. Review's `knownKana` callback becomes `() => knownChars
   as today.
 - Example words under the quiz card and on the Words tab come from the selected script's list.
 - Streaks and the session counters are shared across scripts.
+- Pick mode needs at least 4 characters in play; with fewer, the card falls back to type mode.
 
 ## 5. Pitch accent with small kana
 
