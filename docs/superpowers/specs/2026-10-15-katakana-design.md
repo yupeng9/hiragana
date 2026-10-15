@@ -52,12 +52,12 @@ has learned, used by Review's romaji ruby and by word filtering:
 - the hiragana of rows in `activeRows(state, "hira")`;
 - the katakana of rows in `activeRows(state, "kata")`;
 - `ー`, always (it is not a row);
-- katakana small kana when the kana they attach to is learned: ッ with ツ, ャ ュ ョ with
-  ヤ ユ ヨ, ァ ィ ゥ ェ ォ with ア イ ウ エ オ.
+- small kana in either script when the kana they attach to is learned: っ/ッ with つ/ツ,
+  ゃゅょ/ャュョ with や ゆ よ / ヤ ユ ヨ, ぁぃぅぇぉ/ァィゥェォ with あ い う え お / ア イ ウ エ オ.
 
-Hiragana small kana keep today's behaviour (always glossed); this change does not touch them.
-Katakana word eligibility uses the same set: every character must be in it. Review's
-`knownKana` callback becomes `() => knownChars(state)`.
+This changes today's hiragana behaviour on purpose: small hiragana were always glossed, and
+now follow the same rule as katakana. Word eligibility for katakana uses the same set: every
+character must be in it. Review's `knownKana` callback becomes `() => knownChars(state)`.
 
 ## 4. Practice, Chart, Words, Progress
 
@@ -86,15 +86,15 @@ accent, if any; the plan lists them by script and fixes the cases found.
 - A katakana SRS deck (the Review decks already contain a few katakana words, now glossed
   only until their rows are learned).
 - Dakuten/handakuten rows (neither script teaches them yet).
-- Changing hiragana small-kana reading-aid behaviour.
 
 ## 7. Tests
 
 - `data`: `KATA_ROWS` mirrors `ROWS` (ids, romaji, 46 characters); `ALL` has both scripts;
   katakana letters are the +0x60 of their hiragana.
 - `store`: `activeRows`/`activeScript` fall back safely on bad values; `knownChars` covers
-  rows, ー, and small-kana attachment.
-- `romaji`: katakana ruby disappears once a row is learned; ー and ッ cases.
+  rows, ー, and small-kana attachment in both scripts.
+- `romaji`: katakana ruby disappears once a row is learned; ー and ッ cases; small kana in both
+  scripts are glossed until their base kana is learned (e.g. きょ needs き and よ).
 - `pitch`: `morae` counts キャ as one, ッ and ー as one each; accent positions follow.
 - `words`: every `KATA_WORDS` entry uses only basic katakana, ー and small kana; no
   duplicates; accents are null or within the mora count.
