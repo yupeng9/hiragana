@@ -5,7 +5,7 @@ import {
 } from "./store.js";
 import { merge, canonical } from "./merge.js";
 import { GistClient, Syncer, connect, loadConfig, saveConfig, clearConfig } from "./sync.js";
-import { moraHtml, accentMarkHtml } from "./pitch.js";
+import { morae, moraHtml, accentMarkHtml } from "./pitch.js";
 import { deckCounts } from "./cards.js";
 import { initReview } from "./review.js";
 
@@ -37,8 +37,8 @@ const starHtml = kana => {
 // opts.highlight: kana to highlight. opts.hidden: during a question, hide whatever would give
 // the answer away — the target kana becomes "？" in pick mode, the romaji is hidden in type mode.
 function wordHtml(w, { highlight, hidden } = {}) {
-  const kana = [...w.kana].map((ch, i) => {
-    const shown = ch !== highlight ? ch : hidden === "kana" ? `<mark>？</mark>` : `<mark>${ch}</mark>`;
+  const kana = morae(w.kana).map((m, i) => {
+    const shown = [...m].map(ch => ch !== highlight ? ch : hidden === "kana" ? `<mark>？</mark>` : `<mark>${ch}</mark>`).join("");
     return moraHtml(shown, i, w.accent);
   }).join("") + accentMarkHtml(w.kana, w.accent);
   const romaji = hidden ? "answer to reveal" : `${w.romaji} 🔊`;

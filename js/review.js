@@ -7,7 +7,7 @@ import {
   srsSettings, setSrsSettings, srsOf, recordReview, saveCustomCard, deleteCustomCard, liveCustomCards, SRS_DECKS,
 } from "./store.js";
 import { rubyHtml, syllables } from "./romaji.js";
-import { moraHtml, accentMarkHtml } from "./pitch.js";
+import { morae, moraHtml, accentMarkHtml } from "./pitch.js";
 
 const DECK_NAMES = { vocab: "Vocabulary", kanji: "Kanji", grammar: "Grammar", custom: "My cards" };
 const RATINGS = [[AGAIN, "Again", "again"], [HARD, "Hard", "hard"], [GOOD, "Good", "good"], [EASY, "Easy", "easy"]];
@@ -37,13 +37,13 @@ export function initReview({ getState, update, knownKana, speak }) {
   // Kana with the Words-tab pitch-accent marks when the accent is known, keeping the reading aid.
   function kanaHtml(kana, accent) {
     const text = str(kana);
-    const n = [...text].length;
+    const n = morae(text).length;
     if (!Number.isInteger(accent) || accent < 0 || accent > Math.min(n, 9)) return `<span class="rev-kana">${jp(text)}</span>`;
     const known = romajiOn() ? knownKana() : null;
     let i = 0;
     const body = syllables(text).map(({ text: t, romaji }) => {
-      const morae = [...t].map(ch => moraHtml(esc(ch), i++, accent)).join("");
-      return known && romaji && ![...t].every(ch => known.has(ch)) ? `<ruby>${morae}<rt>${romaji}</rt></ruby>` : morae;
+      const marks = morae(t).map(m => moraHtml(esc(m), i++, accent)).join("");
+      return known && romaji && ![...t].every(ch => known.has(ch)) ? `<ruby>${marks}<rt>${romaji}</rt></ruby>` : marks;
     }).join("");
     return `<span class="rev-kana pitch">${body}${accentMarkHtml(text, accent)}</span>`;
   }
