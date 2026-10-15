@@ -16,8 +16,21 @@ export const ROWS = [
 export const DEFAULT_ROWS = ["a", "ka", "sa", "ta"];  // rows learned so far
 export const MAX_BOX = 5;
 
-export const ALL = ROWS.flatMap(r => r.chars.filter(Boolean).map(([kana, romaji, ...alts]) =>
-  ({ kana, romaji, accepted: [romaji, ...alts], row: r.id })));
+// Katakana sits exactly 0x60 above hiragana in Unicode, so the rows are derived, not retyped.
+const toKata = ch => String.fromCharCode(ch.charCodeAt(0) + 0x60);
+export const KATA_ROWS = ROWS.map(r => ({ ...r, chars: r.chars.map(c => c && [toKata(c[0]), ...c.slice(1)]) }));
+export const SCRIPTS = ["hira", "kata"];
+export const scriptRows = script => (script === "kata" ? KATA_ROWS : ROWS);
+
+const flatten = (rows, script) => rows.flatMap(r => r.chars.filter(Boolean).map(([kana, romaji, ...alts]) =>
+  ({ kana, romaji, accepted: [romaji, ...alts], row: r.id, script })));
+export const ALL = [...flatten(ROWS, "hira"), ...flatten(KATA_ROWS, "kata")];
+
+// A small kana counts as learned once the full-size kana it attaches to is learned.
+export const SMALL_BASE = {
+  っ: "つ", ゃ: "や", ゅ: "ゆ", ょ: "よ", ぁ: "あ", ぃ: "い", ぅ: "う", ぇ: "え", ぉ: "お",
+  ッ: "ツ", ャ: "ヤ", ュ: "ユ", ョ: "ヨ", ァ: "ア", ィ: "イ", ゥ: "ウ", ェ: "エ", ォ: "オ",
+};
 
 // Example words: [kana, romaji, kanji (or "" if usually written in kana), English, Chinese,
 // pitch accent]. Pitch accent is the Tokyo-standard dictionary number: the mora after which
