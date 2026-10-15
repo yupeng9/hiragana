@@ -23,12 +23,13 @@ Decisions from the brainstorm:
   with each kana converted to katakana (あ→ア … ん→ン, を→ヲ).
 - `ALL` entries gain a `script` field (`"hira"` | `"kata"`). Hiragana entries are unchanged
   otherwise; `kana` stays the key for stats, so ア and あ already have separate progress.
-- `KATA_WORDS`: about 100 loanwords in a new file `js/words-katakana.js`, same tuple shape as
-  `WORDS`: `[kana, romaji, kanji ("" for katakana words), English, Chinese, accent]`.
-  Examples: コーヒー, タクシー, テレビ, ケーキ. A word is usable once every character is in
-  the learned katakana set (see §3).
-- Authored in parts and proofread by a second pass; accents checked against OJAD, readings
-  and meanings against jisho. Entries with an unverified accent use `null`.
+- `KATA_WORDS`: about 100 loanwords in a new file `js/words-katakana.js`. Authored as
+  `[kana, English, Chinese, accent]`; the module expands each to the same object shape as
+  `WORDS` (`kana, romaji, kanji: "", en, zh, accent`) and derives `romaji` with `toRomaji`, so
+  spelling and romaji cannot disagree. Examples: コーヒー, タクシー, ケーキ, テニス, メニュー.
+  Only words with no ゛゜ qualify (so not テレビ or パン). Every accent is a number, verified
+  against OJAD; a word whose accent cannot be verified is left out.
+- Authored in parts and proofread by a second pass; readings and meanings checked against jisho.
 
 ## 2. Settings and state
 
