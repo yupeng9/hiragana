@@ -1,7 +1,8 @@
-import { ROWS, ALL, WORDS, MAX_BOX } from "./data.js";
+import { ALL, WORDS, MAX_BOX, scriptRows } from "./data.js";
+import { KATA_WORDS } from "./words-katakana.js";
 import {
   loadState, saveState, statOf, isSaved, savedWords, toggleWord, recordAnswer,
-  updateBest, setSettings, resetProgress, activeRows, activeMode,
+  updateBest, setSettings, resetProgress, activeRows, activeMode, activeScript, knownChars,
 } from "./store.js";
 import { merge, canonical } from "./merge.js";
 import { GistClient, Syncer, connect, loadConfig, saveConfig, clearConfig } from "./sync.js";
@@ -15,7 +16,8 @@ saveState(localStorage, state);  // persists a v1 → v2 migration straight away
 // ---------- Helpers ----------
 const $ = id => document.getElementById(id);
 const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
-const pool = () => ALL.filter(c => activeRows(state).includes(c.row));
+const script = () => activeScript(state);
+const pool = () => ALL.filter(c => c.script === script() && activeRows(state, script()).includes(c.row));
 
 // Save locally, then sync a few seconds later.
 function persist() {
@@ -24,8 +26,8 @@ function persist() {
 }
 
 function usableWords() {
-  const known = new Set(pool().map(c => c.kana));
-  return WORDS.filter(w => [...w.kana].every(ch => known.has(ch)));
+  const known = knownChars(state);
+  return (script() === "kata" ? KATA_WORDS : WORDS).filter(w => [...w.kana].every(ch => known.has(ch)));
 }
 const wordsWith = (kana, limit) => shuffle(usableWords().filter(w => w.kana.includes(kana))).slice(0, limit);
 
@@ -104,15 +106,16 @@ const session = { correct: 0, total: 0, streak: 0 };
 let current = null, answered = false, currentMode = null, currentWords = [];
 
 function renderRowToggles() {
-  $("rowToggles").innerHTML = ROWS.map(r => {
-    const on = activeRows(state).includes(r.id);
+  const sc = script();
+  $("rowToggles").innerHTML = scriptRows(sc).map(r => {
+    const on = activeRows(state, sc).includes(r.id);
     const sample = r.chars.find(Boolean)[0];
     return `<label class="${on ? "on" : ""}"><input type="checkbox" value="${r.id}" ${on ? "checked" : ""}>${sample} ${r.label}</label>`;
   }).join("");
   $("rowToggles").querySelectorAll("input").forEach(inp => inp.addEventListener("change", () => {
     const sel = [...$("rowToggles").querySelectorAll("input:checked")].map(i => i.value);
-    if (sel.length === 0) { inp.checked = true; return; }  // keep at least one row
-    setSettings(state, { rows: sel }, Date.now());
+    if (sel.length === 0 && sc === "hira") { inp.checked = true; return; }  // hiragana keeps at least one row
+    setSettings(state, { [sc === "kata" ? "krows" : "rows"]: sel }, Date.now());
     persist();
     renderRowToggles();
     renderChart();
@@ -120,7 +123,44 @@ function renderRowToggles() {
   }));
 }
 
+function renderScriptSwitch() {
+  document.querySelectorAll("#scriptSwitch button").forEach(b => b.classList.toggle("on", b.dataset.script === script()));
+}
+
+// Redraw everything that depends on the selected script.
+function applyScript() {
+  renderScriptSwitch();
+  renderRowToggles();
+  renderChart();
+  nextCard();
+  const view = document.querySelector(".view.active").id;
+  if (view === "words") renderWords();
+  if (view === "progress") renderProgress();
+}
+
+$("scriptSwitch").addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (!b || b.dataset.script === script()) return;
+  setSettings(state, { script: b.dataset.script }, Date.now());
+  persist();
+  applyScript();
+});
+
+// Katakana starts with no rows learned, so there may be nothing to quiz yet.
+function showEmptyPractice() {
+  current = null; answered = false; currentMode = null; currentWords = [];
+  $("hint").textContent = "";
+  $("prompt").textContent = "";
+  $("prompt").className = "prompt";
+  $("answerArea").innerHTML = `<p class="empty-practice">Pick the katakana rows you've learned above to start practising.</p>`;
+  $("feedback").textContent = "";
+  $("feedback").className = "feedback";
+  $("nextBtn").style.display = "none";
+  $("examples").innerHTML = "";
+}
+
 function nextCard() {
+  if (!pool().length) { showEmptyPractice(); return; }
   current = pickCard();
   lastKana = current.kana;
   answered = false;
@@ -231,13 +271,13 @@ $("autoSpeak").addEventListener("change", e => { setSettings(state, { autoSpeak:
 function gridHtml(cellFn) {
   const vowels = ["a", "i", "u", "e", "o"];
   return `<table class="chart"><tr><th></th>${vowels.map(v => `<th>${v}</th>`).join("")}</tr>` +
-    ROWS.map(r => `<tr><th>${r.label}</th>${r.chars.map(c => c ? cellFn(ALL.find(x => x.kana === c[0])) : `<td class="cell empty"></td>`).join("")}</tr>`).join("") +
+    scriptRows(script()).map(r => `<tr><th>${r.label}</th>${r.chars.map(c => c ? cellFn(ALL.find(x => x.kana === c[0])) : `<td class="cell empty"></td>`).join("")}</tr>`).join("") +
     `</table>`;
 }
 
 function renderChart() {
   $("chartTable").innerHTML = gridHtml(c =>
-    `<td class="cell ${activeRows(state).includes(c.row) ? "" : "off"}" data-kana="${c.kana}"><span class="k">${c.kana}</span><span class="r">${c.accepted.join(" / ")}</span></td>`);
+    `<td class="cell ${activeRows(state, script()).includes(c.row) ? "" : "off"}" data-kana="${c.kana}"><span class="k">${c.kana}</span><span class="r">${c.accepted.join(" / ")}</span></td>`);
   $("chartTable").querySelectorAll("td[data-kana]").forEach(td =>
     td.addEventListener("click", () => {
       speak(td.dataset.kana);
@@ -248,7 +288,9 @@ function renderChart() {
 
 function renderWords() {
   const words = usableWords().sort((a, b) => a.kana.localeCompare(b.kana, "ja"));
-  $("wordsInfo").textContent = `${words.length} words you can read with your practice set. Click a word to hear it, ☆ to save it — enable more rows to unlock more. The circled number is the pitch accent: the line over the kana shows high pitch, and the tick marks where it drops (⓪ = never drops).`;
+  $("wordsInfo").textContent = words.length
+    ? `${words.length} words you can read with your practice set. Click a word to hear it, ☆ to save it — enable more rows to unlock more. The circled number is the pitch accent: the line over the kana shows high pitch, and the tick marks where it drops (⓪ = never drops).`
+    : "No words yet — pick the rows you've learned on the Practice tab to unlock words.";
   $("wordsList").innerHTML = words.map(w => wordHtml(w)).join("");
 }
 
@@ -258,7 +300,7 @@ function renderDictionary() {
     ? `${entries.length} saved word${entries.length > 1 ? "s" : ""}, newest first. Click to hear, ★ to remove.`
     : "Your dictionary is empty. Click ☆ on any word to save it here.";
   $("dictList").innerHTML = entries.map(({ kana, t }) => {
-    const w = WORDS.find(x => x.kana === kana);
+    const w = (WORDS.find(x => x.kana === kana) ?? KATA_WORDS.find(x => x.kana === kana));
     return w ? wordHtml(w).replace("</div>", `<span class="wd">saved ${new Date(t).toLocaleDateString()}</span></div>`) : "";
   }).join("");
 }
@@ -268,7 +310,7 @@ function renderProgress() {
     const s = state.stats[c.kana];
     const level = !s || s.seen === 0 ? 0 : 1 + Math.min(4, s.box);
     const acc = s && s.seen ? `${Math.round(100 * s.correct / s.seen)}% · ${s.seen}×` : "—";
-    return `<td class="cell m${level} ${activeRows(state).includes(c.row) ? "" : "off"}"><span class="k">${c.kana}</span><span class="r">${acc}</span></td>`;
+    return `<td class="cell m${level} ${activeRows(state, script()).includes(c.row) ? "" : "off"}"><span class="k">${c.kana}</span><span class="r">${acc}</span></td>`;
   });
   const st = kana => statOf(state, kana);
   const weak = pool()
@@ -300,7 +342,7 @@ function updateReviewBadge() {
 const review = initReview({
   getState: () => state,
   update: fn => { fn(state, Date.now()); persist(); updateReviewBadge(); },
-  knownKana: () => new Set(pool().map(c => c.kana)),
+  knownKana: () => knownChars(state),
   speak,
 });
 
@@ -331,7 +373,8 @@ function showStatus(status) {
 // Merge what the gist had into whatever is local *now* (the user may have changed
 // something while the request was in flight), then refresh the screen.
 function applyRemote(remote) {
-  const rowsBefore = JSON.stringify(activeRows(state));
+  const viewKey = () => JSON.stringify([script(), activeRows(state, "hira"), activeRows(state, "kata")]);
+  const viewBefore = viewKey();
   const before = canonical(state);
   state = merge(state, remote);
   if (canonical(state) === before) return;  // nothing new from the other device
@@ -341,10 +384,11 @@ function applyRemote(remote) {
   $("autoSpeak").checked = state.settings.autoSpeak;
   $("sBest").textContent = state.bestStreak.value;
   refreshStars();
-  if (rowsBefore !== JSON.stringify(activeRows(state))) {
+  if (viewBefore !== viewKey()) {
+    renderScriptSwitch();
     renderRowToggles();
     renderChart();
-    if (!answered && current && !activeRows(state).includes(current.row)) nextCard();
+    if (!answered && (!current || !pool().some(c => c.kana === current.kana))) nextCard();
   }
   updateReviewBadge();
   const view = document.querySelector(".view.active").id;
@@ -425,6 +469,7 @@ document.querySelectorAll("[data-view]").forEach(b => b.addEventListener("click"
   if (b.dataset.view === "review" && $("review").classList.contains("active")) review.home();
   document.querySelectorAll("nav button").forEach(x => x.classList.toggle("active", x === b));
   document.querySelectorAll(".view").forEach(v => v.classList.toggle("active", v.id === b.dataset.view));
+  $("scriptSwitch").hidden = !["practice", "chart", "words", "progress"].includes(b.dataset.view);
   if (b.dataset.view === "progress") renderProgress();
   if (b.dataset.view === "words") renderWords();
   if (b.dataset.view === "dictionary") renderDictionary();
@@ -437,6 +482,7 @@ document.querySelectorAll("[data-view]").forEach(b => b.addEventListener("click"
 $("mode").value = activeMode(state);
 $("autoSpeak").checked = state.settings.autoSpeak;
 $("sBest").textContent = state.bestStreak.value;
+renderScriptSwitch();
 renderRowToggles();
 renderChart();
 nextCard();

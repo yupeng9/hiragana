@@ -247,6 +247,16 @@ ruby rt { font-size: .45em; color: var(--muted); }
 .rev-list-btns { display: flex; gap: 6px; }
 
 /* ---------- iPhone / narrow screens ---------- */
+.script-switch { display: flex; gap: 8px; margin-bottom: 12px; }
+.script-switch[hidden] { display: none; }
+.script-switch button {
+  flex: 1; max-width: 160px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--card); color: var(--muted); font-size: 15px; cursor: pointer;
+}
+.script-switch button.on { border-color: var(--accent); background: #fbecea; color: var(--ink); font-weight: 600; }
+.empty-practice { color: var(--muted); padding: 24px 0; }
+@media (max-width: 640px) { .script-switch button { min-height: 44px; } }
+
 @media (max-width: 640px) {
   header {
     padding: 10px 14px; padding-top: max(10px, env(safe-area-inset-top));
