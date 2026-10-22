@@ -114,7 +114,9 @@ export function knownChars(state) {
   for (const script of ["hira", "kata"]) {
     const learned = new Set(activeRows(state, script));
     for (const row of scriptRows(script)) {
-      if (learned.has(row.id)) for (const c of row.chars) if (c) known.add(c[0]);
+      if (!learned.has(row.id)) continue;
+      // A youon kana is a first kana plus a small one: the row teaches the small kana only.
+      for (const c of row.chars) if (c) for (const ch of (row.group === "youon" ? [...c[0]].slice(1) : [...c[0]])) known.add(ch);
     }
   }
   for (const [small, base] of Object.entries(SMALL_BASE)) if (known.has(base)) known.add(small);

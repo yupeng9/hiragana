@@ -441,3 +441,46 @@ test("the Review reading aid follows katakana and small-kana progress", () => {
   s.settings.rows = ["a", "ka", "ya"];
   assert.equal(rubyHtml("きょう", knownChars(s)), "きょう");
 });
+
+test("a ticked dakuon row teaches its voiced kana, in either script", () => {
+  const s = emptyState();
+  assert.ok(!knownChars(s).has("が"));
+  s.settings.rows = ["a", "ka", "ga"];
+  s.settings.krows = ["za"];
+  const known = knownChars(s);
+  for (const ch of "がぎぐげご") assert.ok(known.has(ch), ch);
+  for (const ch of "ザジズゼゾ") assert.ok(known.has(ch), ch);
+  assert.ok(!known.has("ざ") && !known.has("ガ"));
+});
+
+test("a ticked youon row teaches only its small kana, not the first kana", () => {
+  const s = emptyState();
+  s.settings.rows = ["a", "kya"];
+  let known = knownChars(s);
+  for (const ch of "ゃゅょ") assert.ok(known.has(ch), ch);
+  assert.ok(!known.has("き"), "き still needs the ka row");
+  s.settings.krows = ["sha"];
+  known = knownChars(s);
+  for (const ch of "ャュョ") assert.ok(known.has(ch), ch);
+  assert.ok(!known.has("シ"));
+});
+
+test("activeRows accepts the new row ids and drops unknown ones", () => {
+  const s = emptyState();
+  s.settings.rows = ["a", "ga", "kya", "zz"];
+  assert.deepEqual(activeRows(s), ["a", "ga", "kya"]);
+  s.settings.krows = ["pa", "ja", "qq"];
+  assert.deepEqual(activeRows(s, "kata"), ["pa", "ja"]);
+});
+
+test("the Review reading aid hides romaji over voiced and combined kana once their rows are ticked", () => {
+  const s = emptyState();                                   // hiragana a ka sa ta
+  assert.match(rubyHtml("がっこう", knownChars(s)), /<ruby>が<rt>ga<\/rt><\/ruby>/);
+  s.settings.rows = ["a", "ka", "sa", "ta", "ga"];
+  assert.equal(rubyHtml("がっこう", knownChars(s)), "がっこう");      // っ follows つ (ta row)
+  assert.match(rubyHtml("きょう", knownChars(s)), /<ruby>きょ<rt>kyo<\/rt><\/ruby>/);
+  s.settings.rows.push("kya");
+  assert.equal(rubyHtml("きょう", knownChars(s)), "きょう");
+  s.settings.krows = ["ka", "kya"];
+  assert.match(rubyHtml("キョウ", knownChars(s)), /^キョ<ruby>ウ<rt>u<\/rt><\/ruby>$/, "ウ still needs the katakana a row");
+});
