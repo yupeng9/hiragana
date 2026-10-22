@@ -65,3 +65,9 @@ test("exactLocal matches a whole word or reading only", () => {
   const first = exactLocal("あい")[0];
   assert.ok(!exactLocal("あい", new Set([first.key])).some(e => e.key === first.key));
 });
+
+test("a curly apostrophe in the query matches a straight one in the data", () => {
+  const straight = lookupLocal("i'm").map(e => e.key);
+  assert.ok(straight.length > 0, "the data has a meaning with an apostrophe");
+  assert.deepEqual(lookupLocal("i\u2019m").map(e => e.key), straight);
+});

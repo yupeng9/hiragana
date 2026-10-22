@@ -6,7 +6,7 @@ import { VOCAB } from "./decks/vocab.js";
 import { KANJI } from "./decks/kanji.js";
 
 const toHira = s => s.replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
-const clean = q => String(q ?? "").normalize("NFKC").trim();
+const clean = q => String(q ?? "").normalize("NFKC").replace(/[\u2018\u2019]/g, "'").trim();
 const isEnglish = q => /^[A-Za-z][A-Za-z\s'’-]*$/.test(q);
 const keyOf = (word, kana) => `${word}|${kana}`;
 

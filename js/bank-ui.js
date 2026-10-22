@@ -115,20 +115,25 @@ export function initBank({ getState, update, speak }) {
     autoFilled = false;
     if (!q.trim()) { sug = []; renderSuggestions(); setLookupMsg(""); return; }
     const exclude = myKeys();
-    if (field !== "en" && ([...q.trim()].length >= 2 || /[一-鿿]/.test(q))) {
-      const exact = exactLocal(q, exclude);
-      const othersEmpty = ["word", "kana", "en", "zh", "accent"].filter(n => n !== field).every(n => !f[n].value.trim());
-      if (exact.length === 1 && othersEmpty) {
-        fillFrom(exact[0]);
-        sug = []; autoFilled = true;
-        renderSuggestions();
-        setLookupMsg("Filled from the built-in words — edit if needed.");
-        return;
-      }
-    }
     sug = lookupLocal(q, { exclude });
     renderSuggestions();
     setLookupMsg("");
+  }
+
+  // Called when the learner leaves a field (not while typing, not during IME composition): if what they
+  // typed is exactly the spelling of one built-in word and the other fields are empty, fill them in.
+  function tryAutoFill(field) {
+    if (!lookupOn()) return;
+    const f = $("bankForm"), q = f[field].value.trim().normalize("NFKC");
+    if (!q) return;
+    const exact = exactLocal(q, myKeys()).filter(e => e.word === q);
+    const othersEmpty = ["word", "kana", "en", "zh", "accent"].filter(n => n !== field).every(n => !f[n].value.trim());
+    if (exact.length !== 1 || !othersEmpty) return;
+    stopLookup();
+    fillFrom(exact[0]);
+    sug = []; autoFilled = true;
+    renderSuggestions();
+    setLookupMsg("Filled from the built-in words — edit if needed.");
   }
 
   // Online: Jotoba. A newer query cancels the older one; failures never block adding a word by hand.
@@ -154,16 +159,21 @@ export function initBank({ getState, update, speak }) {
     }
   }
 
+  function scheduleLookup(field) {
+    lastField = field;
+    stopLookup();
+    localTimer = setTimeout(() => runLocal(field), 150);
+    onlineTimer = setTimeout(() => runOnline(field), 450);
+  }
   for (const field of LOOKUP_FIELDS) {
-    $("bankForm")[field].addEventListener("input", () => {
-      if (!lookupOn()) return;
-      lastField = field;
-      stopLookup();
-      localTimer = setTimeout(() => runLocal(field), 150);
-      onlineTimer = setTimeout(() => runOnline(field), 450);
-    });
+    const el = $("bankForm")[field];
+    // While a Japanese keyboard is composing, the field holds unconfirmed text: wait for compositionend.
+    el.addEventListener("input", e => { if (lookupOn() && !e.isComposing) scheduleLookup(field); });
+    el.addEventListener("compositionend", () => { if (lookupOn()) scheduleLookup(field); });
+    if (field !== "en") el.addEventListener("change", () => tryAutoFill(field));
   }
   $("bankLookupBtn").addEventListener("click", () => {
+    if (!$("bankForm")[lastField].value.trim()) { setLookupMsg("Type something to look up."); return; }
     stopLookup();
     runLocal(lastField);
     runOnline(lastField);

@@ -84,3 +84,15 @@ test("searchJotoba stops when the caller aborts and marks the error", async () =
   ctl.abort();
   await assert.rejects(p, e => e.aborted === true);
 });
+
+test("a timeout while the body is being read reports the timeout, not bad JSON", async () => {
+  const slowBody = (_url, opts) => ({
+    ok: true, status: 200,
+    json: () => new Promise((_, reject) => opts.signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")))),
+  });
+  await assert.rejects(searchJotoba("slow-body-1", { fetchFn: slowBody, timeoutMs: 20 }), /too long/);
+  const ctl = new AbortController();
+  const p = searchJotoba("slow-body-2", { fetchFn: slowBody, signal: ctl.signal, timeoutMs: 5000 });
+  setTimeout(() => ctl.abort(), 10);
+  await assert.rejects(p, e => e.aborted === true);
+});

@@ -71,7 +71,10 @@ export async function searchJotoba(query, { fetchFn = (...a) => fetch(...a), tim
     }
     if (!res.ok) throw fail(`The dictionary answered with an error (${res.status}).`);
     let data;
-    try { data = await res.json(); } catch { throw fail("The dictionary sent an unreadable answer."); }
+    try { data = await res.json(); } catch {
+      if (signal?.aborted) throw fail("The lookup was cancelled.", true);
+      throw fail(ctl.signal.aborted ? "The dictionary took too long to answer." : "The dictionary sent an unreadable answer.");
+    }
     const found = candidatesFrom(data);
     cache.set(q, found);
     return found;

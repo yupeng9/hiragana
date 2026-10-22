@@ -35,13 +35,13 @@ Decisions from the brainstorm:
     first, then prefix matches, then the rest, ties in index order;
   - entries whose key is in `exclude` (the learner's existing My words) are skipped.
 - `exactLocal(query, exclude)` returns the entries whose word or reading equals the query exactly
-  (reading compared hiragana-folded).
+  (hiragana-folded). The form narrows this to `e.word === query` before auto-filling.
 
 ## 2. Online dictionary (`js/jotoba.js`)
 
 - `searchJotoba(query, { fetchFn = fetch, timeoutMs = 6000 })` POSTs
   `https://jotoba.de/api/search/words` with JSON `{ query, language: "English", no_english: false }`
-  and returns up to 5 candidates `{ word, kana, en, zh: "", accent, source: "jotoba" }`, or throws
+  and returns up to 5 candidates `{ key, word, kana, en, zh: "", accent, source: "dictionary" }`, or throws
   an `Error` with a short message on a network error, timeout, non-200 reply or unreadable JSON.
 - From each result word: `kana = reading.kana`; `word = reading.kanji || reading.kana`;
   `en` = the first 3 glosses of the senses in order, joined with "; ";
@@ -62,20 +62,25 @@ Decisions from the brainstorm:
 - New markup in the Add word form: a **🔍 Look up** button next to the Japanese field, a
   suggestions list `#bankSuggest` below the first three fields, and a status line `#bankLookupMsg`.
   The lookup UI is hidden when editing an existing word.
-- **What triggers a search.** Typing in Japanese, Reading or English (when the learner is adding):
+- **What triggers a search.** Typing in Japanese, Reading or English (when the learner is adding; not during IME composition):
   - after 150 ms of no typing, local matches are shown immediately;
   - after 450 ms, Jotoba is queried as well (and **Look up** queries it at once). A newer query
     aborts the older request. The query is the text of the field being typed in.
   - Jotoba candidates already present locally (same key) are dropped; the rest are appended below
     the local ones, each row tagged "built-in" or "dictionary".
-- **Auto-fill.** If the typed Japanese or reading matches exactly one local entry (`exactLocal`)
-  and the other four fields are all empty, they are filled at once and the status line says
-  "Filled from the built-in words — edit if needed."
+- **Auto-fill.** When the learner leaves the Japanese or Reading field (the `change` event, never
+  while typing and never during IME composition), and what they typed is exactly the spelling
+  (`word`) of one built-in word, and the other four fields are all empty, those fields are filled
+  and the status line says "Filled from the built-in words — edit if needed." A reading that only
+  matches a word's pronunciation (はし for 橋 and 箸) is never auto-filled; it shows suggestions.
+  While typing, only suggestions appear: nothing is written into any field.
+- **Japanese keyboards.** `input` events during composition are ignored; the lookup runs on
+  `compositionend`, so the unconfirmed text is never searched or overwritten.
 - **Choosing a row.** Tapping a suggestion fills Japanese, Reading, English, Chinese and Pitch
   (blank when unknown), clears the suggestions, and sets the status "Filled from the dictionary —
   edit if needed." Existing text is replaced because the learner asked for it by tapping.
 - **Status lines.** "Looking up…", "No matches — type the word in yourself.", "Couldn't reach the
-  dictionary (offline?) — you can type the word in yourself." and, when the built-in matches exist
+  dictionary. You can type the word in yourself." and, when the built-in matches exist
   but Jotoba fails, only the offline note after the local rows.
 - All dictionary text reaches the page through `esc()`. Suggestion rows are `<button type="button">`
   elements so Enter in a field still submits the form only when no suggestion has focus.
