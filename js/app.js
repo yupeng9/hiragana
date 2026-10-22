@@ -9,6 +9,7 @@ import { GistClient, Syncer, connect, loadConfig, saveConfig, clearConfig } from
 import { morae, moraHtml, accentMarkHtml } from "./pitch.js";
 import { deckCounts } from "./cards.js";
 import { initReview } from "./review.js";
+import { initBank } from "./bank-ui.js";
 
 let state = loadState(localStorage);
 saveState(localStorage, state);  // persists a v1 → v2 migration straight away
@@ -74,7 +75,7 @@ function toggleSaved(kana) {
   toggleWord(state, kana, Date.now());
   persist();
   refreshStars();
-  if ($("dictionary").classList.contains("active")) renderDictionary();
+  if ($("dictionary").classList.contains("active")) { renderDictionary(); bank.refresh(); }
 }
 
 // ☆ buttons save words; any other element with data-say speaks its text when clicked.
@@ -361,6 +362,12 @@ const review = initReview({
   speak,
 });
 
+const bank = initBank({
+  getState: () => state,
+  update: fn => { fn(state, Date.now()); persist(); },
+  speak,
+});
+
 // Learning cards come due by the minute, so recount while the app is open.
 setInterval(() => {
   updateReviewBadge();
@@ -414,7 +421,7 @@ function applyRemote(remote) {
   const view = document.querySelector(".view.active").id;
   if (view === "review") review.refresh();
   if (view === "words") renderWords();
-  if (view === "dictionary") renderDictionary();
+  if (view === "dictionary") { renderDictionary(); bank.refresh(); }
   if (view === "progress") renderProgress();
 }
 
@@ -492,7 +499,7 @@ document.querySelectorAll("[data-view]").forEach(b => b.addEventListener("click"
   $("scriptSwitch").hidden = !["practice", "chart", "words", "progress"].includes(b.dataset.view);
   if (b.dataset.view === "progress") renderProgress();
   if (b.dataset.view === "words") renderWords();
-  if (b.dataset.view === "dictionary") renderDictionary();
+  if (b.dataset.view === "dictionary") { renderDictionary(); bank.home(); }
   if (b.dataset.view === "sync") renderSyncPanel();
   if (b.dataset.view === "review") review.refresh();
   if (b.dataset.view === "practice" && currentMode === "type" && !answered) $("answer")?.focus();
