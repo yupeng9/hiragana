@@ -123,7 +123,7 @@ function carryUnknown(a, b) {
   const out = {};
   for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
     if (KNOWN_KEYS.has(key) || key === "__proto__") continue;
-    const x = a[key], y = b[key];
+    const x = Object.hasOwn(a, key) ? a[key] : undefined, y = Object.hasOwn(b, key) ? b[key] : undefined;
     out[key] = x === undefined ? y : y === undefined ? x : canonical(x) >= canonical(y) ? x : y;
   }
   return out;

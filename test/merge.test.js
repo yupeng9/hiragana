@@ -399,3 +399,10 @@ test("an own key named __proto__ in a remote file cannot change the merged objec
   assert.equal(Object.getPrototypeOf(merged), Object.prototype);
   assert.equal(merged.polluted, undefined);
 });
+
+test("unknown keys named like Object.prototype members merge the same in any order", () => {
+  const a = JSON.parse('{"version":2,"constructor":5,"hasOwnProperty":"x"}');
+  const b = base(), c = base();
+  assert.equal(canonical(merge(merge(a, b), c)), canonical(merge(c, merge(b, a))));
+  assert.equal(merge(a, b).constructor, 5);
+});

@@ -88,7 +88,7 @@ test("pickEntry favours weak words and never repeats the last one", () => {
 });
 
 test("buildChoices returns the answer plus up to 3 distinct other entries, shuffled", () => {
-  const entries = ["a", "b", "c", "d", "e"].map(k => ({ key: k, word: k, en: k, zh: "" }));
+  const entries = ["a", "b", "c", "d", "e"].map(k => ({ key: k, word: k, kana: k, en: k, zh: "" }));
   const answer = entries[0];
   for (let i = 0; i < 30; i++) {
     const choices = buildChoices(entries, answer, meaningText);
@@ -96,7 +96,7 @@ test("buildChoices returns the answer plus up to 3 distinct other entries, shuff
     assert.ok(choices.some(c => c.key === "a"));
     assert.equal(new Set(choices.map(meaningText)).size, 4);
   }
-  const same = [answer, { key: "x", word: "x", en: "a", zh: "" }, { key: "y", word: "y", en: "b", zh: "" }];
+  const same = [answer, { key: "x", word: "x", kana: "x", en: "a", zh: "" }, { key: "y", word: "y", kana: "y", en: "b", zh: "" }];
   assert.equal(buildChoices(same, answer, meaningText).length, 2, "an entry with the same label is not a distractor");
 });
 
@@ -120,4 +120,25 @@ test("validateMyWord trims, requires word, kana and a meaning, and checks the pi
   assert.match(validateMyWord({ word: "猫", kana: "ねこ", en: "cat", accent: "-1" }).error, /whole number/);
   assert.equal(validateMyWord({ word: "猫", kana: "ねこ", en: "cat", accent: "0" }).value.accent, 0);
   assert.equal(validateMyWord({ word: "コーヒー", kana: "コーヒー", en: "coffee" }).error, undefined);
+});
+
+test("buildChoices never offers a second right answer: same word, same reading or same meaning", () => {
+  const answer = { key: "犬|いぬ", word: "犬", kana: "いぬ", en: "dog", zh: "" };
+  const entries = [
+    answer,
+    { key: "いぬ|いぬ", word: "いぬ", kana: "いぬ", en: "dog (kana)", zh: "" },          // same reading
+    { key: "犬|けん", word: "犬", kana: "けん", en: "dog (on)", zh: "" },                  // same word
+    { key: "ドッグ|どっぐ", word: "ドッグ", kana: "どっぐ", en: "dog", zh: "" },           // same meaning
+    { key: "猫|ねこ", word: "猫", kana: "ねこ", en: "cat", zh: "" },
+  ];
+  for (let i = 0; i < 20; i++) {
+    const keys = buildChoices(entries, answer, meaningText).map(c => c.key).sort();
+    assert.deepEqual(keys, ["犬|いぬ", "猫|ねこ"].sort());
+  }
+});
+
+test("matchesReading accepts nnn for ん, cch for tch and full-width romaji", () => {
+  assert.ok(matchesReading("konnnichiha", "こんにちは"));
+  assert.ok(matchesReading("macchi", "マッチ"));
+  assert.ok(matchesReading("ｎｅｋｏ", "ねこ"));
 });

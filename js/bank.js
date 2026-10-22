@@ -42,11 +42,11 @@ const FOLD = [
   [/sya/g, "sha"], [/syu/g, "shu"], [/syo/g, "sho"], [/tya/g, "cha"], [/tyu/g, "chu"], [/tyo/g, "cho"],
   [/jya/g, "ja"], [/jyu/g, "ju"], [/jyo/g, "jo"], [/zya/g, "ja"], [/zyu/g, "ju"], [/zyo/g, "jo"],
   [/si/g, "shi"], [/ti/g, "chi"], [/tu/g, "tsu"], [/(?<![sc])hu/g, "fu"], [/zi/g, "ji"],
-  [/nn/g, "n"], [/ou/g, "oo"], [/ei/g, "ee"],
+  [/cch/g, "tch"], [/n{2,}/g, "n"], [/ou/g, "oo"], [/ei/g, "ee"],
 ];
 
 export function canonicalRomaji(text) {
-  let r = text.normalize("NFC").toLowerCase()
+  let r = text.normalize("NFKC").toLowerCase()
     .replace(/[āīūēō]/g, c => MACRON[c])
     .replace(/[\s'’\-・.,]/g, "");
   for (const [re, to] of FOLD) r = r.replace(re, to);
@@ -81,11 +81,13 @@ export function pickEntry(entries, state, lastKey, rnd = Math.random) {
   return pool[pool.length - 1];
 }
 
-// The answer plus up to 3 other entries whose label differs, shuffled.
+// The answer plus up to 3 other entries that differ in word, reading, meaning and label, shuffled.
 export function buildChoices(entries, answer, label, rnd = Math.random) {
   const seen = new Set([label(answer)]);
   const picked = [];
-  for (const e of shuffle(entries.filter(x => x.key !== answer.key), rnd)) {
+  // A distractor must differ in word, reading and meaning, or it could be a second right answer.
+  const clash = x => x.word === answer.word || x.kana === answer.kana || meaningText(x) === meaningText(answer);
+  for (const e of shuffle(entries.filter(x => x.key !== answer.key && !clash(x)), rnd)) {
     const l = label(e);
     if (seen.has(l)) continue;
     seen.add(l);

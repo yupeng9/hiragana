@@ -66,7 +66,8 @@ export function initBank({ getState, update, speak }) {
 
   function updateMoraHint() {
     const n = morae($("bankForm").kana.value.trim()).length;
-    $("bankMoraHint").textContent = n ? `The reading has ${n} mora${n === 1 ? "" : "e"}; the pitch number can be 0–${n}.` : "";
+    $("bankMoraHint").textContent = (n ? `The reading has ${n} mora${n === 1 ? "" : "e"}; the pitch number can be 0–${n}. ` : "") +
+      "Words are read as spelled (は is “ha”).";
   }
 
   $("bankForm").kana.addEventListener("input", updateMoraHint);
@@ -108,6 +109,7 @@ export function initBank({ getState, update, speak }) {
     $("bankFeedback").textContent = ""; $("bankFeedback").className = "feedback";
     $("bankReveal").innerHTML = ""; $("bankAnswer").innerHTML = "";
     $("bankNextBtn").style.display = "none";
+    $("bankListenBtn").style.display = "none";   // hearing the word first would give the answer away
   }
 
   function nextCard() {
@@ -121,8 +123,9 @@ export function initBank({ getState, update, speak }) {
     }
     mode = modeFor(entries);
     const wanted = $("bankMode").value;
+    const count = `${entries.length} word${entries.length === 1 ? "" : "s"} in this source.`;
     $("bankNote").textContent = entries.length < 4 && wanted !== "type"
-      ? "Pick and listen modes need at least 4 words in this source; typing is used until then." : "";
+      ? `${count} Pick and listen modes need at least 4 words; typing is used until then.` : count;
     entry = pickEntry(entries, getState(), lastKey);
     lastKey = entry.key;
     answered = false;
@@ -142,7 +145,7 @@ export function initBank({ getState, update, speak }) {
     const label = mode === "pickWord" ? e => e.word : meaningText;
     if (mode === "pickMeaning") { $("bankHint").textContent = "What does it mean?"; prompt.textContent = entry.word; }
     else if (mode === "pickWord") { $("bankHint").textContent = "Which word is this?"; prompt.textContent = meaningText(entry); prompt.classList.add("small"); }
-    else { $("bankHint").textContent = "Listen, then pick the meaning"; prompt.textContent = "🔊"; speak(entry.kana); }
+    else { $("bankHint").textContent = "Listen, then pick the meaning"; prompt.textContent = "🔊"; $("bankListenBtn").style.display = ""; speak(entry.kana); }
     const choices = buildChoices(entries, entry, label);
     $("bankAnswer").innerHTML = `<div class="choices bank-choices">${choices.map((c, i) =>
       `<button data-key="${esc(c.key)}"><small>${i + 1}</small>${esc(label(c))}</button>`).join("")}</div>`;
@@ -173,6 +176,7 @@ export function initBank({ getState, update, speak }) {
       <div>${esc(entry.en)}${entry.en && entry.zh ? " " : ""}${entry.zh ? `<span class="zh">${entry.en ? "· " : ""}${esc(entry.zh)}</span>` : ""}</div>`;
     if (getState().settings.autoSpeak && mode !== "listen") speak(entry.kana);
     $("bankNextBtn").style.display = "";
+    $("bankListenBtn").style.display = "";
     document.activeElement?.blur();
   }
 
@@ -187,6 +191,7 @@ export function initBank({ getState, update, speak }) {
   document.addEventListener("keydown", e => {
     if (!$("dictionary").classList.contains("active") || panel !== "bankPractice") return;
     if (answered && e.key === "Enter") { e.preventDefault(); nextCard(); return; }
+    if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.("select, input, textarea")) return;
     if (!answered && PICK_MODES.includes(mode) && /^[1-4]$/.test(e.key)) {
       const btn = document.querySelectorAll("#bankAnswer button")[+e.key - 1];
       if (btn) btn.click();
