@@ -148,8 +148,69 @@
 
   <!-- Dictionary -->
   <section id="dictionary" class="view">
-    <p class="muted" id="dictInfo"></p>
-    <div class="word-list" id="dictList"></div>
+    <div id="bankHome">
+      <p id="bankSummary" class="bank-summary"></p>
+      <div class="actions">
+        <button class="btn" id="bankAddBtn">＋ Add word</button>
+        <button class="btn primary" id="bankPracticeBtn">Practice</button>
+      </div>
+      <h3 class="group-title">My words</h3>
+      <div class="word-list" id="myWordsList"></div>
+      <h3 class="group-title">Saved words</h3>
+      <p class="muted" id="dictInfo"></p>
+      <div class="word-list" id="dictList"></div>
+    </div>
+
+    <form id="bankForm" class="rev-form" hidden novalidate>
+      <h2 id="bankFormTitle">Add word</h2>
+      <label>Japanese <input name="word" placeholder="e.g. 猫"></label>
+      <label>Reading (kana) <input name="kana" placeholder="e.g. ねこ"></label>
+      <label>English <input name="en"></label>
+      <label>Chinese <input name="zh"></label>
+      <label>Pitch accent (optional) <input name="accent" inputmode="numeric" placeholder="0 = flat"></label>
+      <p class="muted" id="bankMoraHint"></p>
+      <p class="rev-msg" id="bankFormMsg" role="alert"></p>
+      <div class="actions">
+        <button type="submit" class="btn primary">Save</button>
+        <button type="button" class="btn" id="bankCancelBtn">Cancel</button>
+      </div>
+    </form>
+
+    <div id="bankPractice" hidden>
+      <button class="btn" id="bankBackBtn">← Back</button>
+      <div class="controls">
+        Mode:
+        <select id="bankMode">
+          <option value="type">Word → type its reading</option>
+          <option value="pickMeaning">Word → pick the meaning</option>
+          <option value="pickWord">Meaning → pick the word</option>
+          <option value="listen">Listen → pick the meaning</option>
+          <option value="mixed">Mixed</option>
+        </select>
+        Words:
+        <select id="bankSource">
+          <option value="both">Saved + mine</option>
+          <option value="saved">Saved only</option>
+          <option value="mine">Mine only</option>
+        </select>
+      </div>
+      <p class="muted" id="bankNote"></p>
+      <div class="card">
+        <div class="hint" id="bankHint"></div>
+        <div class="prompt bank-prompt" id="bankPrompt"></div>
+        <div id="bankAnswer"></div>
+        <div class="feedback" id="bankFeedback"></div>
+        <div class="bank-reveal" id="bankReveal"></div>
+        <div class="actions">
+          <button class="btn" id="bankListenBtn">🔊 Listen</button>
+          <button class="btn primary" id="bankNextBtn" style="display:none">Next ↵</button>
+        </div>
+      </div>
+      <div class="session">
+        <div>Session: <b id="bCorrect">0</b> / <b id="bTotal">0</b></div>
+        <div>Streak: <b id="bStreak">0</b></div>
+      </div>
+    </div>
   </section>
 
   <!-- Progress -->
