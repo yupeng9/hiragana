@@ -26,3 +26,8 @@ test("every word has English, Chinese and a pitch accent within its morae", () =
     assert.equal(w.romaji, toRomaji(w.kana));
   }
 });
+
+test("at least 40 katakana words use voiced or combined kana", () => {
+  const voiced = /[ガギグゲゴザジズゼゾダヂヅデドバビブベボパピプペポャュョ]/u;
+  assert.ok(KATA_WORDS.filter(w => voiced.test(w.kana)).length >= 40);
+});

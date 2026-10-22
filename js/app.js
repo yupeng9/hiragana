@@ -1,5 +1,5 @@
-import { ALL, WORDS, MAX_BOX, scriptRows } from "./data.js";
-import { KATA_WORDS } from "./words-katakana.js";
+import { ALL, MAX_BOX, scriptRows } from "./data.js";
+import { wordsFor, findWord } from "./words.js";
 import {
   loadState, saveState, statOf, isSaved, savedWords, toggleWord, recordAnswer,
   updateBest, setSettings, resetProgress, activeRows, activeMode, activeScript, knownChars,
@@ -27,7 +27,7 @@ function persist() {
 
 function usableWords() {
   const known = knownChars(state);
-  return (script() === "kata" ? KATA_WORDS : WORDS).filter(w => [...w.kana].every(ch => known.has(ch)));
+  return wordsFor(script()).filter(w => [...w.kana].every(ch => known.has(ch)));
 }
 const wordsWith = (kana, limit) => shuffle(usableWords().filter(w => w.kana.includes(kana))).slice(0, limit);
 
@@ -301,7 +301,7 @@ function renderDictionary() {
     ? `${entries.length} saved word${entries.length > 1 ? "s" : ""}, newest first. Click to hear, ★ to remove.`
     : "Your dictionary is empty. Click ☆ on any word to save it here.";
   $("dictList").innerHTML = entries.map(({ kana, t }) => {
-    const w = (WORDS.find(x => x.kana === kana) ?? KATA_WORDS.find(x => x.kana === kana));
+    const w = findWord(kana);
     return w ? wordHtml(w).replace("</div>", `<span class="wd">saved ${new Date(t).toLocaleDateString()}</span></div>`) : "";
   }).join("");
 }
