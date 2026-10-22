@@ -285,7 +285,7 @@ function gridHtml(cellFn) {
 
 function renderChart() {
   $("chartTable").innerHTML = gridHtml(c =>
-    `<td class="cell ${activeRows(state, script()).includes(c.row) ? "" : "off"}" data-kana="${c.kana}"><span class="k">${c.kana}</span><span class="r">${c.accepted.join(" / ")}</span></td>`);
+    `<td class="cell ${activeRows(state, script()).includes(c.row) ? "" : "off"}" data-kana="${c.kana}"><span class="k">${c.kana}</span><span class="r">${c.accepted.slice(0, 2).join(" / ")}</span></td>`);
   $("chartTable").querySelectorAll("td[data-kana]").forEach(td =>
     td.addEventListener("click", () => {
       speak(td.dataset.kana);
