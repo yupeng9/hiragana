@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ROWS, KATA_ROWS, ALL, SCRIPTS, scriptRows, SMALL_BASE } from "../js/data.js";
+import { ROWS, KATA_ROWS, GROUPS, ALL, SCRIPTS, scriptRows, SMALL_BASE } from "../js/data.js";
 
 test("KATA_ROWS mirrors ROWS with katakana characters", () => {
   assert.equal(KATA_ROWS.length, ROWS.length);
@@ -18,11 +18,11 @@ test("KATA_ROWS mirrors ROWS with katakana characters", () => {
   });
 });
 
-test("ALL holds 46 characters per script, each tagged with its script", () => {
-  assert.equal(ALL.length, 92);
-  assert.equal(ALL.filter(c => c.script === "hira").length, 46);
-  assert.equal(ALL.filter(c => c.script === "kata").length, 46);
-  assert.equal(new Set(ALL.map(c => c.kana)).size, 92, "kana are unique across scripts");
+test("ALL holds 104 characters per script, each tagged with its script", () => {
+  assert.equal(ALL.length, 208);
+  assert.equal(ALL.filter(c => c.script === "hira").length, 104);
+  assert.equal(ALL.filter(c => c.script === "kata").length, 104);
+  assert.equal(new Set(ALL.map(c => c.kana)).size, 208, "kana are unique across scripts");
   assert.deepEqual(SCRIPTS, ["hira", "kata"]);
 });
 
@@ -49,4 +49,45 @@ test("SMALL_BASE maps each small kana to a kana in the same script", () => {
   }
   assert.equal(SMALL_BASE["ッ"], "ツ");
   assert.equal(SMALL_BASE["ょ"], "よ");
+});
+
+test("rows come in three groups: 11 basic, 5 dakuon, 11 youon", () => {
+  const count = g => ROWS.filter(r => r.group === g).length;
+  assert.equal(ROWS.length, 27);
+  assert.deepEqual([count("basic"), count("dakuon"), count("youon")], [11, 5, 11]);
+  assert.equal(new Set(ROWS.map(r => r.id)).size, 27, "row ids are unique");
+  const order = ROWS.map(r => ["basic", "dakuon", "youon"].indexOf(r.group));
+  assert.deepEqual(order, [...order].sort((x, y) => x - y), "ordered basic, dakuon, youon");
+  assert.deepEqual(KATA_ROWS.map(r => r.group), ROWS.map(r => r.group));
+});
+
+test("GROUPS lists each group's chart columns", () => {
+  assert.deepEqual(GROUPS.map(g => g.id), ["basic", "dakuon", "youon"]);
+  assert.deepEqual(GROUPS.map(g => g.label), ["基本", "濁音", "拗音"]);
+  assert.deepEqual(GROUPS[2].cols, ["ya", "yu", "yo"]);
+  for (const g of GROUPS) for (const r of ROWS.filter(r => r.group === g.id)) assert.equal(r.chars.length, g.cols.length, `${r.id} slots`);
+});
+
+test("dakuon and youon romaji, including alternate spellings", () => {
+  const acc = k => ALL.find(c => c.kana === k).accepted;
+  assert.deepEqual(acc("が"), ["ga"]);
+  assert.deepEqual(acc("じ"), ["ji", "zi"]);
+  assert.deepEqual(acc("ぢ"), ["di", "ji"], "ぢ shows di in pick mode but still accepts ji");
+  assert.deepEqual(acc("づ"), ["du", "zu"]);
+  assert.deepEqual(acc("ぱ"), ["pa"]);
+  assert.deepEqual(acc("きゃ"), ["kya"]);
+  assert.deepEqual(acc("しゃ"), ["sha", "sya"]);
+  assert.deepEqual(acc("ちょ"), ["cho", "tyo"]);
+  assert.deepEqual(acc("じゅ"), ["ju", "jyu", "zyu"]);
+  assert.deepEqual(acc("ぴょ"), ["pyo"]);
+});
+
+test("katakana dakuon and youon are derived from the hiragana strings", () => {
+  const find = k => ALL.find(c => c.kana === k);
+  assert.equal(find("ガ").row, "ga");
+  assert.equal(find("ヂ").script, "kata");
+  assert.deepEqual(find("キャ").accepted, ["kya"]);
+  assert.deepEqual(find("シュ").accepted, ["shu", "syu"]);
+  assert.equal(find("ジョ").row, "ja");
+  assert.equal(find("ヴ"), undefined, "ヴ is out of scope");
 });

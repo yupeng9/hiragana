@@ -1,6 +1,6 @@
 // ---------- Data ----------
 // Each row: id, label, and 5 slots [kana, romaji, ...alternate spellings] (null = empty slot)
-export const ROWS = [
+const BASIC = [
   { id: "a",  label: "a",  chars: [["あ","a"],["い","i"],["う","u"],["え","e"],["お","o"]] },
   { id: "ka", label: "ka", chars: [["か","ka"],["き","ki"],["く","ku"],["け","ke"],["こ","ko"]] },
   { id: "sa", label: "sa", chars: [["さ","sa"],["し","shi","si"],["す","su"],["せ","se"],["そ","so"]] },
@@ -13,11 +13,44 @@ export const ROWS = [
   { id: "wa", label: "wa", chars: [["わ","wa"],null,null,null,["を","wo","o"]] },
   { id: "n",  label: "n",  chars: [["ん","n","nn"],null,null,null,null] },
 ];
+
+const DAKUON = [
+  { id: "ga", label: "ga", chars: [["が","ga"],["ぎ","gi"],["ぐ","gu"],["げ","ge"],["ご","go"]] },
+  { id: "za", label: "za", chars: [["ざ","za"],["じ","ji","zi"],["ず","zu"],["ぜ","ze"],["ぞ","zo"]] },
+  { id: "da", label: "da", chars: [["だ","da"],["ぢ","di","ji"],["づ","du","zu"],["で","de"],["ど","do"]] },
+  { id: "ba", label: "ba", chars: [["ば","ba"],["び","bi"],["ぶ","bu"],["べ","be"],["ぼ","bo"]] },
+  { id: "pa", label: "pa", chars: [["ぱ","pa"],["ぴ","pi"],["ぷ","pu"],["ぺ","pe"],["ぽ","po"]] },
+];
+
+// A youon row is one consonant kana plus small ゃ ゅ ょ; prefixes are the romaji spellings
+// (first = the one shown in pick mode), completed with a / u / o.
+const youon = (id, kana, prefixes) => ({
+  id, label: id,
+  chars: [["a", "ゃ"], ["u", "ゅ"], ["o", "ょ"]].map(([v, small]) => [kana + small, ...prefixes.map(p => p + v)]),
+});
+const YOUON = [
+  youon("kya", "き", ["ky"]), youon("sha", "し", ["sh", "sy"]), youon("cha", "ち", ["ch", "ty"]),
+  youon("nya", "に", ["ny"]), youon("hya", "ひ", ["hy"]), youon("mya", "み", ["my"]),
+  youon("rya", "り", ["ry"]), youon("gya", "ぎ", ["gy"]), youon("ja", "じ", ["j", "jy", "zy"]),
+  youon("bya", "び", ["by"]), youon("pya", "ぴ", ["py"]),
+];
+
+// Rows are grouped for the UI: each group has its own heading and chart columns.
+export const GROUPS = [
+  { id: "basic", label: "基本", cols: ["a", "i", "u", "e", "o"] },
+  { id: "dakuon", label: "濁音", cols: ["a", "i", "u", "e", "o"] },
+  { id: "youon", label: "拗音", cols: ["ya", "yu", "yo"] },
+];
+export const ROWS = [
+  ...BASIC.map(r => ({ ...r, group: "basic" })),
+  ...DAKUON.map(r => ({ ...r, group: "dakuon" })),
+  ...YOUON.map(r => ({ ...r, group: "youon" })),
+];
 export const DEFAULT_ROWS = ["a", "ka", "sa", "ta"];  // rows learned so far
 export const MAX_BOX = 5;
 
 // Katakana sits exactly 0x60 above hiragana in Unicode, so the rows are derived, not retyped.
-const toKata = ch => String.fromCharCode(ch.charCodeAt(0) + 0x60);
+const toKata = s => [...s].map(ch => String.fromCharCode(ch.charCodeAt(0) + 0x60)).join("");
 export const KATA_ROWS = ROWS.map(r => ({ ...r, chars: r.chars.map(c => c && [toKata(c[0]), ...c.slice(1)]) }));
 export const SCRIPTS = ["hira", "kata"];
 export const scriptRows = script => (script === "kata" ? KATA_ROWS : ROWS);
@@ -35,7 +68,7 @@ export const SMALL_BASE = {
 // Example words: [kana, romaji, kanji (or "" if usually written in kana), English, Chinese,
 // pitch accent]. Pitch accent is the Tokyo-standard dictionary number: the mora after which
 // the pitch drops (0 = flat, never drops).
-// Only words spelled with basic hiragana (no ゛゜ or small kana). A word is shown only
+// Words made of basic hiragana; words with ゛゜ or ゃゅょ live in words-voiced.js. A word is shown only
 // once every character in it belongs to the practice set, so the list grows with each row.
 export const WORDS = [
   // あ か さ た rows only
