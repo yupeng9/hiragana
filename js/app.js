@@ -79,12 +79,15 @@ function toggleSaved(kana) {
 }
 
 // ☆ buttons save words; any other element with data-say speaks its text when clicked.
-document.addEventListener("click", e => {
+// The listener sits on each list of cards, not on `document`: iOS Safari only turns a tap into a
+// click on a plain div/span when that element or an ancestor below <body> has its own click listener.
+function onWordClick(e) {
   const star = e.target.closest("[data-save]");
   if (star) { toggleSaved(star.dataset.save); return; }
   const el = e.target.closest("[data-say]");
   if (el) speak(el.dataset.say);
-});
+}
+for (const id of ["examples", "chartWords", "wordsList", "dictList", "myWordsList"]) $(id).addEventListener("click", onWordClick);
 
 function speak(text) {
   if (!("speechSynthesis" in window)) return;

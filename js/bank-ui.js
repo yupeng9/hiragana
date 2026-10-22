@@ -264,7 +264,7 @@ export function initBank({ getState, update, speak }) {
     const label = mode === "pickWord" ? e => e.word : meaningText;
     if (mode === "pickMeaning") { $("bankHint").textContent = "What does it mean?"; prompt.textContent = entry.word; }
     else if (mode === "pickWord") { $("bankHint").textContent = "Which word is this?"; prompt.textContent = meaningText(entry); prompt.classList.add("small"); }
-    else { $("bankHint").textContent = "Listen, then pick the meaning"; prompt.textContent = "🔊"; $("bankListenBtn").style.display = ""; speak(entry.kana); }
+    else { $("bankHint").textContent = "Listen, then pick the meaning"; prompt.innerHTML = `<button type="button" class="btn bank-play" id="bankPlay" aria-label="Play the word">🔊</button>`; $("bankListenBtn").style.display = ""; speak(entry.kana); }
     const choices = buildChoices(entries, entry, label);
     $("bankAnswer").innerHTML = `<div class="choices bank-choices">${choices.map((c, i) =>
       `<button data-key="${esc(c.key)}"><small>${i + 1}</small>${esc(label(c))}</button>`).join("")}</div>`;
@@ -302,6 +302,7 @@ export function initBank({ getState, update, speak }) {
   $("bankAnswer").addEventListener("click", e => { const b = e.target.closest("button[data-key]"); if (b) pick(b.dataset.key); });
   $("bankNextBtn").addEventListener("click", nextCard);
   $("bankListenBtn").addEventListener("click", () => entry && speak(entry.kana));
+  $("bankPrompt").addEventListener("click", e => { if (e.target.closest("#bankPlay") && entry) speak(entry.kana); });
   $("bankMode").addEventListener("change", nextCard);
   $("bankSource").addEventListener("change", () => { lastKey = null; nextCard(); });
   $("bankPracticeBtn").addEventListener("click", () => { show("bankPractice"); nextCard(); });

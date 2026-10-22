@@ -346,3 +346,5 @@ ruby rt { font-size: .45em; color: var(--muted); }
 .bank-sug .sug-src { grid-column: 2; grid-row: 1; font-size: 11px; color: var(--muted); align-self: center; }
 @media (hover: hover) { .bank-sug:hover { border-color: var(--ink); } }
 @media (max-width: 640px) { .bank-sug { min-height: 44px; } }
+
+.bank-play { font-size: 40px; padding: 6px 28px; }
