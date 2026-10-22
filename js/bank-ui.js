@@ -8,6 +8,8 @@ import {
 import { saveMyWord, deleteMyWord, liveMyWords, recordAnswer } from "./store.js";
 import { toRomaji } from "./romaji.js";
 import { morae, moraHtml, accentMarkHtml } from "./pitch.js";
+import { lookupLocal, exactLocal } from "./lookup.js";
+import { searchJotoba } from "./jotoba.js";
 
 const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ESC[c]);
@@ -22,6 +24,7 @@ export function initBank({ getState, update, speak }) {
   const session = { correct: 0, total: 0, streak: 0 };
 
   function show(name) {
+    if (name !== "bankForm") stopLookup();
     panel = name;
     for (const id of PANELS) $(id).hidden = id !== name;
   }
@@ -59,6 +62,7 @@ export function initBank({ getState, update, speak }) {
     f.word.value = w?.word ?? ""; f.kana.value = w?.kana ?? ""; f.en.value = w?.en ?? "";
     f.zh.value = w?.zh ?? ""; f.accent.value = Number.isInteger(w?.accent) ? String(w.accent) : "";
     $("bankFormMsg").textContent = "";
+    $("bankLookup").hidden = Boolean(id); resetLookup(); lastField = "word";
     updateMoraHint();
     show("bankForm");
     f.word.focus();
@@ -69,6 +73,111 @@ export function initBank({ getState, update, speak }) {
     $("bankMoraHint").textContent = (n ? `The reading has ${n} mora${n === 1 ? "" : "e"}; the pitch number can be 0–${n}. ` : "") +
       "Words are read as spelled (は is “ha”).";
   }
+
+  // ---------- Lookup (the Add word form only) ----------
+  const LOOKUP_FIELDS = ["word", "kana", "en"];
+  let sug = [], lastField = "word", ctl = null, localTimer = null, onlineTimer = null, autoFilled = false;
+  const myKeys = () => new Set(liveMyWords(getState()).map(w => `${w.word}|${w.kana}`));
+  const lookupOn = () => panel === "bankForm" && editingId === null;
+  const setLookupMsg = text => { $("bankLookupMsg").textContent = text; };
+
+  function renderSuggestions() {
+    $("bankSuggest").innerHTML = sug.map((s, i) => `<button type="button" class="bank-sug" data-i="${i}">
+      <span class="sug-main">${esc(s.word)}${s.word !== s.kana ? `<span class="sug-kana">${esc(s.kana)}</span>` : ""}</span>
+      <span class="sug-src">${s.source === "dictionary" ? "dictionary" : "built-in"}</span>
+      <span class="sug-en">${esc(s.en)}${s.zh ? ` · ${esc(s.zh)}` : ""}</span></button>`).join("");
+  }
+
+  function stopLookup() {
+    clearTimeout(localTimer); clearTimeout(onlineTimer);
+    ctl?.abort(); ctl = null;
+  }
+
+  function resetLookup() {
+    stopLookup();
+    sug = []; autoFilled = false;
+    renderSuggestions();
+    setLookupMsg("Type a Japanese word, its reading or an English word, then pick a match.");
+  }
+
+  function fillFrom(s) {
+    const f = $("bankForm");
+    f.word.value = s.word; f.kana.value = s.kana; f.en.value = s.en ?? ""; f.zh.value = s.zh ?? "";
+    f.accent.value = Number.isInteger(s.accent) ? String(s.accent) : "";
+    $("bankFormMsg").textContent = "";
+    updateMoraHint();
+  }
+
+  // Instant, offline: built-in matches, with an auto-fill when exactly one word matches exactly.
+  function runLocal(field) {
+    if (!lookupOn()) return;
+    const f = $("bankForm"), q = f[field].value;
+    autoFilled = false;
+    if (!q.trim()) { sug = []; renderSuggestions(); setLookupMsg(""); return; }
+    const exclude = myKeys();
+    if (field !== "en" && ([...q.trim()].length >= 2 || /[一-鿿]/.test(q))) {
+      const exact = exactLocal(q, exclude);
+      const othersEmpty = ["word", "kana", "en", "zh", "accent"].filter(n => n !== field).every(n => !f[n].value.trim());
+      if (exact.length === 1 && othersEmpty) {
+        fillFrom(exact[0]);
+        sug = []; autoFilled = true;
+        renderSuggestions();
+        setLookupMsg("Filled from the built-in words — edit if needed.");
+        return;
+      }
+    }
+    sug = lookupLocal(q, { exclude });
+    renderSuggestions();
+    setLookupMsg("");
+  }
+
+  // Online: Jotoba. A newer query cancels the older one; failures never block adding a word by hand.
+  async function runOnline(field) {
+    if (!lookupOn() || autoFilled) return;
+    const q = $("bankForm")[field].value.trim();
+    if (!q) return;
+    ctl?.abort();
+    const mine = ctl = new AbortController();
+    setLookupMsg("Looking up…");
+    try {
+      const found = await searchJotoba(q, { signal: mine.signal });
+      if (mine.signal.aborted || !lookupOn()) return;
+      const have = new Set([...sug.map(s => s.key), ...myKeys()]);
+      sug = [...sug, ...found.filter(s => !have.has(s.key))];
+      renderSuggestions();
+      setLookupMsg(sug.length ? "" : "No matches — type the word in yourself.");
+    } catch (e) {
+      if (e.aborted || mine.signal.aborted || !lookupOn()) return;
+      setLookupMsg(sug.length
+        ? "Couldn't reach the online dictionary — showing built-in matches only."
+        : `${e.message} You can type the word in yourself.`);
+    }
+  }
+
+  for (const field of LOOKUP_FIELDS) {
+    $("bankForm")[field].addEventListener("input", () => {
+      if (!lookupOn()) return;
+      lastField = field;
+      stopLookup();
+      localTimer = setTimeout(() => runLocal(field), 150);
+      onlineTimer = setTimeout(() => runOnline(field), 450);
+    });
+  }
+  $("bankLookupBtn").addEventListener("click", () => {
+    stopLookup();
+    runLocal(lastField);
+    runOnline(lastField);
+  });
+  $("bankSuggest").addEventListener("click", e => {
+    const b = e.target.closest("button[data-i]");
+    const s = b && sug[Number(b.dataset.i)];
+    if (!s) return;
+    stopLookup();
+    fillFrom(s);
+    sug = []; autoFilled = true;
+    renderSuggestions();
+    setLookupMsg("Filled from the dictionary — edit if needed.");
+  });
 
   $("bankForm").kana.addEventListener("input", updateMoraHint);
   $("bankForm").addEventListener("submit", e => {

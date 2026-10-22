@@ -166,6 +166,11 @@
       <label>Japanese <input name="word" placeholder="e.g. 猫"></label>
       <label>Reading (kana) <input name="kana" placeholder="e.g. ねこ"></label>
       <label>English <input name="en"></label>
+      <div id="bankLookup" class="bank-lookup">
+        <button type="button" class="btn" id="bankLookupBtn">🔍 Look up</button>
+        <div id="bankSuggest" class="bank-suggest"></div>
+        <p class="muted" id="bankLookupMsg" aria-live="polite">Type a Japanese word, its reading or an English word, then pick a match.</p>
+      </div>
       <label>Chinese <input name="zh"></label>
       <label>Pitch accent (optional) <input name="accent" inputmode="numeric" placeholder="0 = flat"></label>
       <p class="muted" id="bankMoraHint"></p>

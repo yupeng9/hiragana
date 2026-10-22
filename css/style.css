@@ -331,3 +331,18 @@ ruby rt { font-size: .45em; color: var(--muted); }
   .prompt.bank-prompt { font-size: 44px; }
   .bank-actions button { min-width: 44px; min-height: 44px; }
 }
+
+.bank-lookup { display: grid; gap: 8px; }
+.bank-lookup[hidden] { display: none; }
+.bank-lookup .btn { justify-self: start; }
+.bank-suggest { display: grid; gap: 6px; }
+.bank-sug {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; text-align: left; padding: 8px 12px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--card); font: inherit; color: var(--ink); cursor: pointer;
+}
+.bank-sug .sug-main { font-size: 20px; }
+.bank-sug .sug-kana { font-size: 14px; color: var(--muted); margin-left: 6px; }
+.bank-sug .sug-en { grid-column: 1; font-size: 14px; color: var(--muted); }
+.bank-sug .sug-src { grid-column: 2; grid-row: 1; font-size: 11px; color: var(--muted); align-self: center; }
+@media (hover: hover) { .bank-sug:hover { border-color: var(--ink); } }
+@media (max-width: 640px) { .bank-sug { min-height: 44px; } }
