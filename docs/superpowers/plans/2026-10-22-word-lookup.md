@@ -226,7 +226,8 @@ test("accentFromPitch: a drop inside the word gives the accent number", () => {
   assert.equal(accentFromPitch(P(["ね", true], ["こ", false]), "ねこ"), 1);                    // head-high
   assert.equal(accentFromPitch(P(["お", false], ["と", true], ["うと", false]), "おとうと"), 2); // middle-high, 2nd mora
   assert.equal(accentFromPitch(P(["た", false], ["べも", true], ["の", false]), "たべもの"), 3);
-  assert.equal(accentFromPitch(P(["き", true], ["ょう", false]), "きょう"), 1, "きょ is one mora: parts that split a mora do not count");
+  assert.equal(accentFromPitch(P(["き", true], ["ょう", false]), "きょう"), null, "a part that splits a mora (きょ) cannot be trusted");
+  assert.equal(accentFromPitch(P(["きょ", true], ["う", false]), "きょう"), 1, "きょ stays together, one mora");
 });
 
 test("accentFromPitch: no drop inside the word is ambiguous, so null", () => {
