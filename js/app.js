@@ -29,7 +29,14 @@ function usableWords() {
   const known = knownChars(state);
   return wordsFor(script()).filter(w => [...w.kana].every(ch => known.has(ch)));
 }
-const wordsWith = (kana, limit) => shuffle(usableWords().filter(w => w.kana.includes(kana))).slice(0, limit);
+// Does `word` contain `kana` as its own kana? A single kana inside a combined one (き in きょ) does not count.
+function hasKana(word, kana) {
+  for (let i = word.indexOf(kana); i >= 0; i = word.indexOf(kana, i + 1)) {
+    if ([...kana].length > 1 || !"ゃゅょャュョ".includes(word[i + kana.length] ?? "")) return true;
+  }
+  return false;
+}
+const wordsWith = (kana, limit) => shuffle(usableWords().filter(w => hasKana(w.kana, kana))).slice(0, limit);
 
 const starHtml = kana => {
   const on = isSaved(state, kana);
@@ -41,8 +48,8 @@ const starHtml = kana => {
 function wordHtml(w, { highlight, hidden } = {}) {
   const mark = text => (hidden === "kana" ? `<mark>？</mark>` : `<mark>${text}</mark>`);
   const kana = morae(w.kana).map((m, i) => {
-    // A combined kana (きゃ) is one mora and highlights whole; a single kana highlights inside a mora.
-    const shown = m === highlight ? mark(m) : [...m].map(ch => ch !== highlight ? ch : mark(ch)).join("");
+    // Highlight a whole mora: a combined kana (きゃ) is one mora, and き inside きゃ is not き.
+    const shown = m === highlight ? mark(m) : m;
     return moraHtml(shown, i, w.accent);
   }).join("") + accentMarkHtml(w.kana, w.accent);
   const romaji = hidden ? "answer to reveal" : `${w.romaji} 🔊`;
