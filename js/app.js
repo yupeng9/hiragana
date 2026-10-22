@@ -89,15 +89,46 @@ function onWordClick(e) {
 }
 for (const id of ["examples", "chartWords", "wordsList", "dictList", "myWordsList"]) $(id).addEventListener("click", onWordClick);
 
+// A short message at the bottom of the screen (used when sound does not start).
+let toastTimer = null;
+function toast(text) {
+  const t = $("toast");
+  t.textContent = text;
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 10_000);
+}
+
+const NO_SOUND_HELP = "Check the silent switch and the volume, and that a Japanese voice is installed " +
+  "(Settings → Accessibility → Spoken Content → Voices → Japanese).";
+
+let speakToken = 0;
 function speak(text) {
-  if (!("speechSynthesis" in window)) return;
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "ja-JP";
-  u.rate = 0.8;
-  const voice = speechSynthesis.getVoices().find(v => v.lang.startsWith("ja"));
-  if (voice) u.voice = voice;
-  speechSynthesis.speak(u);
+  if (!("speechSynthesis" in window)) { toast("This browser can't play speech."); return; }
+  const synth = window.speechSynthesis;
+  const token = ++speakToken;
+  // iPhone Safari can drop a speak() that comes straight after cancel(), so only cancel when something
+  // is playing, and give it a moment. The first call (nothing playing) stays inside the tap.
+  const busy = synth.speaking || synth.pending;
+  if (busy) synth.cancel();
+  if (synth.paused) synth.resume();
+  const play = () => {
+    if (token !== speakToken) return;                       // a newer request replaced this one
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "ja-JP";
+    u.rate = 0.8;
+    const voice = synth.getVoices().find(v => v.lang.startsWith("ja"));
+    if (voice) u.voice = voice;
+    let started = false;
+    u.onstart = () => { started = true; };
+    u.onerror = e => {
+      if (e.error === "canceled" || e.error === "interrupted") return;
+      toast(`Sound failed (${e.error}). ${NO_SOUND_HELP}`);
+    };
+    synth.speak(u);
+    setTimeout(() => { if (!started && token === speakToken && !synth.speaking) toast(`No sound started. ${NO_SOUND_HELP}`); }, 2500);
+  };
+  if (busy) setTimeout(play, 80); else play();
 }
 
 // Leitner-style weighting: characters in lower boxes (weaker) come up far more often.

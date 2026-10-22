@@ -348,3 +348,9 @@ ruby rt { font-size: .45em; color: var(--muted); }
 @media (max-width: 640px) { .bank-sug { min-height: 44px; } }
 
 .bank-play { font-size: 40px; padding: 6px 28px; }
+
+.toast {
+  position: fixed; left: 12px; right: 12px; bottom: calc(80px + env(safe-area-inset-bottom)); z-index: 50;
+  max-width: 560px; margin: 0 auto; padding: 10px 14px; border-radius: 12px; background: var(--ink); color: #fff; font-size: 14px; line-height: 1.4;
+}
+.toast[hidden] { display: none; }
