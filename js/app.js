@@ -1,4 +1,4 @@
-import { ALL, MAX_BOX, scriptRows } from "./data.js";
+import { ALL, MAX_BOX, scriptRows, GROUPS } from "./data.js";
 import { wordsFor, findWord } from "./words.js";
 import {
   loadState, saveState, statOf, isSaved, savedWords, toggleWord, recordAnswer,
@@ -39,8 +39,10 @@ const starHtml = kana => {
 // opts.highlight: kana to highlight. opts.hidden: during a question, hide whatever would give
 // the answer away — the target kana becomes "？" in pick mode, the romaji is hidden in type mode.
 function wordHtml(w, { highlight, hidden } = {}) {
+  const mark = text => (hidden === "kana" ? `<mark>？</mark>` : `<mark>${text}</mark>`);
   const kana = morae(w.kana).map((m, i) => {
-    const shown = [...m].map(ch => ch !== highlight ? ch : hidden === "kana" ? `<mark>？</mark>` : `<mark>${ch}</mark>`).join("");
+    // A combined kana (きゃ) is one mora and highlights whole; a single kana highlights inside a mora.
+    const shown = m === highlight ? mark(m) : [...m].map(ch => ch !== highlight ? ch : mark(ch)).join("");
     return moraHtml(shown, i, w.accent);
   }).join("") + accentMarkHtml(w.kana, w.accent);
   const romaji = hidden ? "answer to reveal" : `${w.romaji} 🔊`;
@@ -107,11 +109,12 @@ let current = null, answered = false, currentMode = null, currentWords = [];
 
 function renderRowToggles() {
   const sc = script();
-  $("rowToggles").innerHTML = scriptRows(sc).map(r => {
-    const on = activeRows(state, sc).includes(r.id);
-    const sample = r.chars.find(Boolean)[0];
-    return `<label class="${on ? "on" : ""}"><input type="checkbox" value="${r.id}" ${on ? "checked" : ""}>${sample} ${r.label}</label>`;
-  }).join("");
+  $("rowToggles").innerHTML = GROUPS.map(g => `<div class="group-label">${g.label}</div>` +
+    scriptRows(sc).filter(r => r.group === g.id).map(r => {
+      const on = activeRows(state, sc).includes(r.id);
+      const sample = r.chars.find(Boolean)[0];
+      return `<label class="${on ? "on" : ""}"><input type="checkbox" value="${r.id}" ${on ? "checked" : ""}>${sample} ${r.label}</label>`;
+    }).join("")).join("");
   $("rowToggles").querySelectorAll("input").forEach(inp => inp.addEventListener("change", () => {
     const sel = [...$("rowToggles").querySelectorAll("input:checked")].map(i => i.value);
     if (sel.length === 0 && sc === "hira") { inp.checked = true; return; }  // hiragana keeps at least one row
@@ -189,7 +192,8 @@ function nextCard() {
     $("hint").textContent = "Which kana is this?";
     prompt.textContent = current.romaji;
     prompt.className = "prompt romaji";
-    const others = shuffle(pool().filter(c => c.kana !== current.kana)).slice(0, 3);
+    // Skip kana that also accept the prompt's spelling (じ and ぢ are both "ji") so only one answer is right.
+    const others = shuffle(pool().filter(c => c.kana !== current.kana && !c.accepted.includes(current.romaji))).slice(0, 3);
     const options = shuffle([current, ...others]);
     $("answerArea").innerHTML = `<div class="choices">${options.map((o, i) =>
       `<button data-kana="${o.kana}"><small>${i + 1}</small>${o.kana}</button>`).join("")}</div>`;
@@ -269,11 +273,14 @@ $("mode").addEventListener("change", e => { setSettings(state, { mode: e.target.
 $("autoSpeak").addEventListener("change", e => { setSettings(state, { autoSpeak: e.target.checked }, Date.now()); persist(); });
 
 // ---------- Chart & Progress ----------
+// One table per group (基本 / 濁音 / 拗音) for the selected script; the youon tables have 3 columns.
 function gridHtml(cellFn) {
-  const vowels = ["a", "i", "u", "e", "o"];
-  return `<table class="chart"><tr><th></th>${vowels.map(v => `<th>${v}</th>`).join("")}</tr>` +
-    scriptRows(script()).map(r => `<tr><th>${r.label}</th>${r.chars.map(c => c ? cellFn(ALL.find(x => x.kana === c[0])) : `<td class="cell empty"></td>`).join("")}</tr>`).join("") +
-    `</table>`;
+  return GROUPS.map(g => {
+    const rows = scriptRows(script()).filter(r => r.group === g.id);
+    return `<h3 class="group-title">${g.label}</h3><table class="chart"><tr><th></th>${g.cols.map(v => `<th>${v}</th>`).join("")}</tr>` +
+      rows.map(r => `<tr><th>${r.label}</th>${r.chars.map(c => c ? cellFn(ALL.find(x => x.kana === c[0])) : `<td class="cell empty"></td>`).join("")}</tr>`).join("") +
+      `</table>`;
+  }).join("");
 }
 
 function renderChart() {

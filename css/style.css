@@ -311,3 +311,7 @@ ruby rt { font-size: .45em; color: var(--muted); }
   .rev-settings input[type="number"] { font-size: 16px; min-height: 44px; }
   .rev-list li { flex-wrap: wrap; }
 }
+.group-label { flex-basis: 100%; margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+.group-label:first-child { margin-top: 0; }
+.group-title { margin: 18px 0 4px; font-size: 14px; color: var(--muted); font-weight: 600; }
+.cell .r { word-break: break-all; line-height: 1.15; }
