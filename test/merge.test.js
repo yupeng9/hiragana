@@ -201,6 +201,14 @@ function randomState(rnd) {
     }
     state.customCards = maybeJunk(state.customCards);
   }
+  if (chance(0.85)) {
+    state.myWords = {};
+    for (const id of ["m1", "m2", "m3"]) {
+      if (chance(0.6)) state.myWords[id] = maybeJunk({ id, word: chance(0.5) ? "猫" : "犬", kana: "ねこ", en: "x", t: int(6), deleted: chance(0.5) });
+    }
+    state.myWords = maybeJunk(state.myWords);
+  }
+  if (chance(0.5)) state.future = chance(0.5) ? { n: int(3) } : "x";
   return state;
 }
 
@@ -364,4 +372,30 @@ test("script and katakana rows travel with the newest settings", () => {
   assert.deepEqual(merge(a, b).settings.krows, ["ka"]);
   assert.equal(merge(b, a).settings.script, "kata");
   assert.equal(canonical(merge(a, b)), canonical(merge(b, a)));
+});
+
+test("myWords: newest edit wins, and a newer tombstone beats an older save", () => {
+  const w = (extra) => ({ id: "w1", word: "猫", kana: "ねこ", en: "cat", t: 5, deleted: false, ...extra });
+  const a = base({ myWords: { w1: w({ en: "cat" }) } });
+  const b = base({ myWords: { w1: w({ en: "kitty", t: 9 }) } });
+  assert.equal(merge(a, b).myWords.w1.en, "kitty");
+  const gone = base({ myWords: { w1: { id: "w1", t: 12, deleted: true } } });
+  assert.equal(merge(b, gone).myWords.w1.deleted, true);
+  assert.equal(canonical(merge(a, gone)), canonical(merge(gone, a)));
+});
+
+test("unknown top-level keys are carried through, whichever side has them", () => {
+  const a = base({ future: { x: 1 } });
+  const b = base();
+  assert.deepEqual(merge(a, b).future, { x: 1 });
+  assert.deepEqual(merge(b, a).future, { x: 1 });
+  const c = base({ future: { x: 2 } });
+  assert.equal(canonical(merge(a, c)), canonical(merge(c, a)), "a clash picks the same side both ways");
+});
+
+test("an own key named __proto__ in a remote file cannot change the merged object's prototype", () => {
+  const evil = JSON.parse('{"version":2,"__proto__":{"polluted":true}}');
+  const merged = merge(base(), evil);
+  assert.equal(Object.getPrototypeOf(merged), Object.prototype);
+  assert.equal(merged.polluted, undefined);
 });

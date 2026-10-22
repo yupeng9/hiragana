@@ -112,10 +112,28 @@ function mergeBest(sides, resetAt) {
   return { bestStreak: kept[0], later: kept.slice(1) };
 }
 
+// Top-level keys merge() understands. Anything else (a field added by a newer app version) is
+// carried through instead of dropped; if both sides have it, the larger canonical JSON wins, so
+// the result is the same whichever device merges first.
+const KNOWN_KEYS = new Set([
+  "version", "settings", "stats", "statsLater", "dictionary", "srs", "srsLater", "customCards", "myWords",
+  "bestStreak", "bestStreakLater", "resetAt",
+]);
+function carryUnknown(a, b) {
+  const out = {};
+  for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    if (KNOWN_KEYS.has(key) || key === "__proto__") continue;
+    const x = a[key], y = b[key];
+    out[key] = x === undefined ? y : y === undefined ? x : canonical(x) >= canonical(y) ? x : y;
+  }
+  return out;
+}
+
 export function merge(a, b) {
   const resetAt = Math.max(a.resetAt || 0, b.resetAt || 0);
   const { bestStreak, later } = mergeBest([a, b], resetAt);
   return {
+    ...carryUnknown(a, b),
     version: 2,
     settings: newer(a.settings, b.settings) ?? null,
     ...mergeCounted(a, b, "stats", { count: "seen", minT: resetAt, keepLater: true }),
@@ -123,6 +141,7 @@ export function merge(a, b) {
     // SRS progress is not cleared by a reset, so there is no reset filter.
     ...mergeCounted(a, b, "srs", { count: "reps", minT: 0, keepLater: false }),
     customCards: mergeMap(a.customCards, b.customCards),
+    myWords: mergeMap(a.myWords, b.myWords),
     bestStreak,
     ...(later.length ? { bestStreakLater: later } : {}),
     resetAt,

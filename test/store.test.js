@@ -4,6 +4,7 @@ import {
   STORE_KEY, LEGACY_KEY, emptyState, loadState, saveState, statOf, isSaved, savedWords,
   toggleWord, recordAnswer, updateBest, setSettings, resetProgress, activeRows, activeMode, activeScript, knownChars,
   srsSettings, setSrsSettings, recordReview, srsOf, saveCustomCard, deleteCustomCard, liveCustomCards,
+  saveMyWord, deleteMyWord, liveMyWords,
 } from "../js/store.js";
 import { DEFAULT_ROWS, MAX_BOX } from "../js/data.js";
 import { merge, canonical } from "../js/merge.js";
@@ -483,4 +484,44 @@ test("the Review reading aid hides romaji over voiced and combined kana once the
   assert.equal(rubyHtml("きょう", knownChars(s)), "きょう");
   s.settings.krows = ["ka", "kya"];
   assert.match(rubyHtml("キョウ", knownChars(s)), /^キョ<ruby>ウ<rt>u<\/rt><\/ruby>$/, "ウ still needs the katakana a row");
+});
+
+test("a new state has an empty myWords map", () => {
+  assert.deepEqual(emptyState().myWords, {});
+});
+
+test("saveMyWord stamps t and deleted:false; deleteMyWord leaves a minimal tombstone", () => {
+  const s = emptyState();
+  saveMyWord(s, { id: "w1", word: "猫", kana: "ねこ", en: "cat", zh: "猫" }, 10);
+  assert.deepEqual(s.myWords.w1, { id: "w1", word: "猫", kana: "ねこ", en: "cat", zh: "猫", t: 10, deleted: false });
+  deleteMyWord(s, "w1", 20);
+  assert.deepEqual(s.myWords.w1, { id: "w1", t: 20, deleted: true });
+});
+
+test("saveMyWord ignores a missing or empty id", () => {
+  const s = emptyState();
+  saveMyWord(s, { word: "猫", kana: "ねこ" }, 10);
+  saveMyWord(s, { id: "", word: "猫", kana: "ねこ" }, 10);
+  saveMyWord(s, null, 10);
+  assert.deepEqual(s.myWords, {});
+});
+
+test("liveMyWords skips tombstones and junk, and takes the id from the map key", () => {
+  const s = emptyState();
+  s.myWords = {
+    a: { id: "zzz", word: "猫", kana: "ねこ", en: "cat", t: 1, deleted: false },
+    b: { id: "b", t: 2, deleted: true },
+    c: null, d: 5, e: { word: "", kana: "いぬ", t: 1 }, f: { word: "犬", kana: 3, t: 1 },
+  };
+  assert.deepEqual(liveMyWords(s).map(w => w.id), ["a"]);
+  s.myWords = "oops";
+  assert.deepEqual(liveMyWords(s), []);
+  delete s.myWords;
+  assert.deepEqual(liveMyWords(s), []);
+});
+
+test("loading a saved state from before myWords existed gives an empty myWords", () => {
+  const old = JSON.stringify({ version: 2, settings: { rows: ["a"], mode: "type", autoSpeak: false, t: 0 }, stats: {}, dictionary: {}, bestStreak: { value: 0, t: 0 }, resetAt: 0 });
+  const s = loadState(memoryStorage({ [STORE_KEY]: old }));
+  assert.deepEqual(s.myWords, {});
 });

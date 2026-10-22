@@ -22,6 +22,7 @@ export function emptyState() {
     resetAt: 0,
     srs: {},
     customCards: {},
+    myWords: {},
   };
 }
 
@@ -208,3 +209,24 @@ export function deleteCustomCard(state, id, now) {
 export const liveCustomCards = state => Object.entries(isObject(state.customCards) ? state.customCards : {})
   .filter(([, c]) => isObject(c) && !c.deleted)
   .map(([id, c]) => ({ ...c, id }));
+
+function myWordsOf(state) {
+  if (!isObject(state.myWords)) state.myWords = {};
+  return state.myWords;
+}
+
+// A word without a non-empty string id is ignored.
+export function saveMyWord(state, word, now) {
+  if (typeof word?.id !== "string" || !word.id) return;
+  myWordsOf(state)[word.id] = { ...word, t: now, deleted: false };
+}
+
+// Deleting leaves a minimal tombstone so the deletion syncs to the other device.
+export function deleteMyWord(state, id, now) {
+  myWordsOf(state)[id] = { id, t: now, deleted: true };
+}
+
+// The map key is the word's id. Entries without a word and a kana string are junk and skipped.
+export const liveMyWords = state => Object.entries(isObject(state.myWords) ? state.myWords : {})
+  .filter(([, w]) => isObject(w) && !w.deleted && typeof w.word === "string" && w.word && typeof w.kana === "string" && w.kana)
+  .map(([id, w]) => ({ ...w, id }));
